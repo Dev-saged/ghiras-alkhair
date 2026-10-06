@@ -2802,7 +2802,7 @@ const initial=n=>[...String(n||'؟').trim()][0]||'؟';
 let uidSeq=0;const uid=()=>(++uidSeq).toString(36);
 // حقول كلمة المرور الجديدة نصّية مُقنَّعة بالـCSS كي لا تظهر نافذة اقتراح كلمات المرور التي تُسقط الكيبورد
 const CAN_MASK=(()=>{try{return CSS.supports('-webkit-text-security','disc')}catch{return false}})();
-const fieldH=({name,label,type='text',value='',auto='off',dir='',req=true,max=64,hint='',mode=''})=>{const id=`f-${name}-${uid()}`,pw=type==='password',mask=pw&&CAN_MASK&&(auto==='new-password'||name==='current'||name==='secret');return html`<div class="field${pw?' pw':''}"><input id="${id}" name="${name}" type="${mask?'text':type}" placeholder=" " value="${value}" autocomplete="${mask?'off':auto}"${mask?raw(' data-mask="1" autocapitalize="off" autocorrect="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other" enterkeyhint="done"'):''}${dir?raw(` dir="${dir}"`):mask?raw(' dir="ltr"'):''}${mode?raw(` inputmode="${mode}"`):''} maxlength="${max}"${req?raw(' required'):''} spellcheck="false"><label for="${id}">${label}</label>${pw?html`<button type="button" class="eye" data-act="pw-eye" aria-label="إظهار كلمة المرور">${icon('eye','sm')}</button>`:''}${hint?html`<small class="hint">${hint}</small>`:''}</div>`};
+const fieldH=({name,label,type='text',value='',auto='off',dir='',req=true,max=64,hint='',mode='',wide=false})=>{const id=`f-${name}-${uid()}`,pw=type==='password',mask=pw&&CAN_MASK&&(auto==='new-password'||name==='current'||name==='secret');return html`<div class="field${pw?' pw':''}${wide?' wide':''}"><input id="${id}" name="${name}" type="${mask?'text':type}" placeholder=" " value="${value}" autocomplete="${mask?'off':auto}"${mask?raw(' data-mask="1" autocapitalize="off" autocorrect="off" data-lpignore="true" data-1p-ignore="true" data-form-type="other" enterkeyhint="done"'):''}${dir?raw(` dir="${dir}"`):mask?raw(' dir="ltr"'):''}${mode?raw(` inputmode="${mode}"`):''} maxlength="${max}"${req?raw(' required'):''} spellcheck="false"><label for="${id}">${label}</label>${pw?html`<button type="button" class="eye" data-act="pw-eye" aria-label="إظهار كلمة المرور">${icon('eye','sm')}</button>`:''}${hint?html`<small class="hint">${hint}</small>`:''}</div>`};
 const selectH=(name,label,opts,val='')=>{const id=`f-${name}-${uid()}`;return html`<div class="field sel"><select id="${id}" name="${name}">${opts.map(([v,l])=>html`<option value="${v}"${v===val?raw(' selected'):''}>${l}</option>`)}</select><label for="${id}">${label}</label></div>`};
 const meterH=()=>html`<div class="meter" data-meter data-s="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>`;
 const errH=()=>html`<p class="g-err" data-err role="alert"></p>`;
@@ -5048,24 +5048,28 @@ VIEWS.aid=function(){
   return el;
 };
 
+const DONOR_SCHEMA={id:'donors',store:'donors',noun:'متبرع',savedMsg:'حُفظ المتبرع',
+  fields:[
+    [{name:'name',kind:'text',label:'الاسم',max:80,wide:true,err:'أدخل اسم المتبرع'},
+     {name:'kind',kind:'select',label:'النوع',options:DONOR_KIND,default:'person'},
+     {name:'country',kind:'text',label:'البلد',max:40,req:false},
+     {name:'phone',kind:'text',label:'الهاتف / واتساب',max:24,dir:'ltr',mode:'tel',req:false},
+     {name:'email',kind:'email',label:'البريد الإلكتروني',max:80,req:false},
+     {name:'note',kind:'textarea',label:'ملاحظات',max:400,wide:true}],
+    {name:'activeSlot',kind:'slot'}
+  ],
+  normalize:(out)=>({...out,phone:out.phone.replace(/[^\d+]/g,'')}),
+  beforeSave:async(v,record)=>{if(!record){const dup=(await repo.list('donors',{index:'nameN',query:normalizeAr(v.name),pii:'none'}))[0];if(dup)throw new DataError('يوجد متبرع بهذا الاسم')}},
+  afterSave:(saved,record)=>{if(!record)location.hash='#/donors/'+saved.id}
+};
 function openDonorEdit(d=null){
-  const fid=uid();let active=d?d.active!==0:true;
-  Dlg.open({title:d?'تعديل المتبرع':'متبرع جديد',body:html`<form class="form" novalidate data-donor-form><div class="form-grid">
-    <div class="field wide"><input id="dn-${fid}" name="name" placeholder=" " value="${d?.name||''}" maxlength="80" required autocomplete="off"><label for="dn-${fid}">الاسم</label></div>
-    ${selectH('kind','النوع',DONOR_KIND,d?.kind||'person')}
-    <div class="field"><input id="dc-${fid}" name="country" placeholder=" " value="${d?.country||''}" maxlength="40" autocomplete="off"><label for="dc-${fid}">البلد</label></div>
-    <div class="field"><input id="dp-${fid}" name="phone" placeholder=" " value="${d?.phone||''}" maxlength="24" dir="ltr" inputmode="tel" autocomplete="off"><label for="dp-${fid}">الهاتف / واتساب</label></div>
-    <div class="field"><input id="de-${fid}" name="email" type="email" placeholder=" " value="${d?.email||''}" maxlength="80" dir="ltr" autocomplete="off"><label for="de-${fid}">البريد الإلكتروني</label></div>
-    <div class="field wide"><textarea class="prose" id="dt-${fid}" name="note" placeholder=" " maxlength="400">${d?.note||''}</textarea><label for="dt-${fid}">ملاحظات</label></div></div>
-    <div class="set-row" style="padding:0;min-height:48px"><div class="r-t"><b>نشط</b></div><button type="button" class="switch" role="switch" aria-checked="${String(active)}" data-on aria-label="نشط"></button></div>
-    ${errH()}<button class="btn btn-primary" type="submit">${icon('check','sm')}<span>حفظ</span></button></form>`,
-  onMount(b){const f=$('form',b);
-    f.addEventListener('click',e=>{const o=e.target.closest('[data-on]');if(o){active=!active;o.setAttribute('aria-checked',String(active))}});
-    f.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f);
-      try{const saved=await withBusy(f,async()=>{const name=clean(fd.get('name'),80);if(!name)throw new DataError('أدخل اسم المتبرع');const email=clean(fd.get('email'),80);if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new DataError('البريد الإلكتروني غير صالح');const phone=clean(fd.get('phone'),24).replace(/[^\d+]/g,'');
-        if(!d){const dup=(await repo.list('donors',{index:'nameN',query:normalizeAr(name),pii:'none'}))[0];if(dup)throw new DataError('يوجد متبرع بهذا الاسم')}
-        return repo.save('donors',{...(d?{id:d.id}:{}),name,kind:DONOR_KIND.some(k=>k[0]===fd.get('kind'))?fd.get('kind'):'person',country:clean(fd.get('country'),40),phone,email,note:clean(fd.get('note'),400),active:active?1:0})});
-        Dlg.close();toast('حُفظ المتبرع','ok');if(!d)location.hash='#/donors/'+saved.id}catch(err){formErr(f,err)}})}});
+  let active=d?d.active!==0:true;
+  entityForm(DONOR_SCHEMA,d,{
+    editTitle:()=>'تعديل المتبرع',
+    slots:{activeSlot:()=>html`<div class="set-row" style="padding:0;min-height:48px"><div class="r-t"><b>نشط</b></div><button type="button" class="switch" role="switch" aria-checked="${String(active)}" data-on aria-label="نشط"></button></div>`},
+    mount:f=>{f.addEventListener('click',e=>{const o=e.target.closest('[data-on]');if(o){active=!active;o.setAttribute('aria-checked',String(active))}})},
+    collect:()=>({active:active?1:0})
+  });
 }
 VIEWS.donors=function(route){const id=route.params?.id;return id?donorView(id):donorListView()};
 function donorListView(){
@@ -6696,7 +6700,7 @@ const optL=(list,k)=>list.find(x=>x[0]===k)?.[1]||k||'—';
 const curOpts=()=>(Finance.curs.length?Finance.curs:CUR_SEED).map(x=>[x.code,`${x.symbol||''} ${x.name||x.code}`.trim()]);
 const sumBy=rows=>Finance.totals(rows.map(r=>({amount:r.amount,currency:r.currency||'ILS',date:r.date||r.paidDate||(r.month?monthEnd(r.month):localDate())})));
 const dateH=(name,label,value='',type='date')=>{const id=`f-${name}-${uid()}`;return html`<div class="field date"><input id="${id}" type="${type}" name="${name}" value="${value}"${type==='date'?raw(` max="${localDate()}"`):''}><label for="${id}">${label}</label></div>`};
-const noteH=(name,label,value='')=>{const id=`f-${name}-${uid()}`;return html`<div class="field"><textarea class="prose" id="${id}" name="${name}" placeholder=" " maxlength="400">${value}</textarea><label for="${id}">${label}</label></div>`};
+const noteH=(name,label,value='',wide=false)=>{const id=`f-${name}-${uid()}`;return html`<div class="field${wide?' wide':''}"><textarea class="prose" id="${id}" name="${name}" placeholder=" " maxlength="400">${value}</textarea><label for="${id}">${label}</label></div>`};
 const rangeChips=(cur)=>html`<div class="chips-row">${[3,6,12,24].map(n=>html`<button type="button" class="chip-btn" data-rg="${n}" aria-pressed="${String(n===cur)}"><span class="num">${n}</span> شهراً</button>`)}</div>`;
 const modHead=(ic,t,p)=>html`<div class="mod-head rise" style="--i:0"><span class="medal">${icon(ic)}</span><div><h2>${t}</h2><p>${p}</p></div><svg class="veins" viewBox="0 0 400 400" aria-hidden="true"><use href="#veins"/></svg></div>`;
 async function expCats(){
@@ -6707,6 +6711,63 @@ async function expCats(){
 function reportOut(R,name){
   Dlg.open({title:R.title,body:html`<div class="imp"><p class="muted">${R.sub||''}</p><div class="btn-row"><button type="button" class="btn btn-primary" data-ro="pdf">${icon('doc','sm')}<span>PDF بالترويسة والختم</span></button><button type="button" class="btn btn-line" data-ro="xlsx">${icon('sheet','sm')}<span>Excel</span></button></div>${errH()}</div>`,
     onMount(b){b.addEventListener('click',async e=>{const k=e.target.closest('[data-ro]')?.dataset.ro;if(!k)return;try{if(k==='pdf'){Dlg.close();await openDoc('report',{R,name:`${name}.pdf`})}else{await exportXlsx(R,`${name}.xlsx`);toast('تم تجهيز ملف Excel','ok')}}catch(err){$('[data-err]',b).textContent=err.message}})}});
+}
+
+/* ══════════ ٤٥ محرك الوحدات: حقول نموذج من schema ══════════ */
+// تغطي فقط نموذج الإضافة/التعديل (لا القوائم ولا التفصيل)؛ القوائم وتقارير PDF/Excel وخصائص كل وحدة الخاصة تبقى كما هي عبر extra
+const FieldKinds={
+  text:{h:(f,v)=>fieldH({name:f.name,label:f.label,value:v??'',max:f.max||80,req:f.req!==false,dir:f.dir||'',mode:f.mode||'',wide:!!f.wide}),
+    parse:(fd,f)=>{const v=clean(fd.get(f.name),f.max||80);if(f.req!==false&&!v)throw new DataError(f.err||`أدخل ${f.label}`);return v}},
+  tel:{h:(f,v)=>fieldH({name:f.name,label:f.label,value:v?fmtPhone(v):'',dir:'ltr',mode:'tel',max:f.max||20,req:f.req!==false}),
+    parse:(fd,f)=>{const v=normPhone(fd.get(f.name));if(f.req!==false&&!v)throw new DataError(f.err||`أدخل ${f.label}`);return v||''}},
+  email:{h:(f,v)=>fieldH({name:f.name,label:f.label,type:'email',value:v??'',dir:'ltr',max:f.max||80,req:f.req!==false}),
+    parse:(fd,f)=>{const v=clean(fd.get(f.name),f.max||80);if(v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))throw new DataError('البريد الإلكتروني غير صالح');if(f.req!==false&&!v)throw new DataError(f.err||`أدخل ${f.label}`);return v}},
+  money:{h:(f,v)=>fieldH({name:f.name,label:f.label,value:v??'',dir:'ltr',mode:'decimal',max:f.max||10,req:f.req!==false}),
+    parse:(fd,f)=>{const n=numIn(fd.get(f.name));if(n==null){if(f.req!==false)throw new DataError(f.err||`أدخل ${f.label}`);return null}if(f.gt0&&n<=0)throw new DataError(f.err||`أدخل ${f.label}`);if(!f.noRange&&(n<(f.min??0)||n>(f.maxVal??1e7)))throw new DataError(f.err||`${f.label} خارج النطاق`);return n}},
+  number:{h:(f,v)=>fieldH({name:f.name,label:f.label,value:v??'',dir:'ltr',mode:'numeric',max:f.max||7,req:f.req!==false}),
+    parse:(fd,f)=>{const n=numIn(fd.get(f.name));if(n==null){if(f.req!==false)throw new DataError(f.err||`أدخل ${f.label}`);return null}return clamp(Math.round(n),f.min??0,f.maxVal??99)}},
+  date:{h:(f,v)=>dateH(f.name,f.label,v||(f.today?localDate():''),f.dtype||'date'),
+    parse:(fd,f)=>{const v=parseDateAny(fd.get(f.name)).iso;if(!v){if(f.req!==false)throw new DataError(f.err||`حدّد ${f.label}`);return ''}if(f.noFuture&&v>localDate())throw new DataError('التاريخ في المستقبل');return v}},
+  select:{h:(f,v)=>selectH(f.name,f.label,typeof f.options==='function'?f.options():f.options,v),
+    parse:(fd,f)=>{const opts=typeof f.options==='function'?f.options():f.options;const v=String(fd.get(f.name)||'');return opts.some(o=>o[0]===v)?v:(f.default??opts[0]?.[0]??'')}},
+  textarea:{h:(f,v)=>noteH(f.name,f.label,v||'',!!f.wide),
+    parse:(fd,f)=>clean(fd.get(f.name),f.max||400)},
+  checkbox:{h:(f,v)=>html`<label class="check"><input type="checkbox" name="${f.name}"${v?raw(' checked'):''}><span>${f.label}</span></label>`,
+    parse:(fd,f)=>fd.get(f.name)==='on'}
+};
+function renderOneField(f,record,extra){
+  if(f.kind==='slot')return extra?.slots?.[f.name]?.(record)||'';
+  const val=record?(f.get?f.get(record):(record[f.name]??f.default??'')):(f.default!==undefined?f.default:'');
+  return FieldKinds[f.kind].h(f,val);
+}
+const entityFieldsHtml=(schema,record,extra)=>schema.fields.map(e=>Array.isArray(e)?html`<div class="form-grid">${e.map(f=>renderOneField(f,record,extra))}</div>`:renderOneField(e,record,extra));
+const flatFields=schema=>schema.fields.flatMap(e=>Array.isArray(e)?e:[e]);
+function entityParse(schema,fd,record){
+  const out={};
+  for(const f of flatFields(schema)){if(f.kind==='slot'||f.skip)continue;out[f.name]=FieldKinds[f.kind].parse(fd,f)}
+  return schema.normalize?schema.normalize(out,record,fd):out;
+}
+function entityForm(schema,record=null,extra={}){
+  const title=record?(extra.editTitle?extra.editTitle(record):schema.editTitle?schema.editTitle(record):`تعديل ${schema.noun}`):`${schema.noun} جديد`;
+  Dlg.open({title,body:html`<form class="form" novalidate data-ent="${schema.id}">${extra.before?extra.before(record):''}${entityFieldsHtml(schema,record,extra)}${errH()}<div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check','sm')}<span>${schema.saveLabel||'حفظ'}</span></button>${record&&extra.deleteBtn?extra.deleteBtn(record):''}</div></form>`,
+  onMount(b){
+    const f=$('form',b);
+    extra.mount?.(f,record);
+    f.addEventListener('click',e=>{if(e.target.closest('[data-ent-del]'))extra.onDelete?.(f,record)});
+    f.addEventListener('submit',async e=>{
+      e.preventDefault();const fd=new FormData(f);
+      try{
+        const vals=entityParse(schema,fd,record);
+        await withBusy(f,async()=>{
+          if(schema.beforeSave)await schema.beforeSave(vals,record,fd);
+          const extraVals=extra.collect?(await extra.collect(fd,record,vals))||{}:{};
+          const saved=await repo.save(schema.store,{...(record?{id:record.id}:{}),...vals,...extraVals});
+          if(schema.afterSave)schema.afterSave(saved,record);
+        });
+        Dlg.close();toast(schema.savedMsg||'تم الحفظ','ok');
+      }catch(err){formErr(f,err)}
+    });
+  }});
 }
 
 /* الموظفون */
@@ -6731,34 +6792,38 @@ function staffListView(){
   effect(()=>{repo.rev('staff')();repo.rev('staffPay')();paint()});
   return el;
 }
+const STAFF_SCHEMA={id:'staff',store:'staff',noun:'موظف',savedMsg:'حُفظت بيانات الموظف',
+  fields:[
+    {name:'name',kind:'text',label:'الاسم',max:80},
+    [{name:'phone',kind:'tel',label:'رقم الجوال',max:20,err:'أدخل رقم الجوال'},
+     {name:'whatsapp',kind:'tel',label:'رقم الواتساب (إن اختلف)',max:20,req:false,get:r=>r.whatsapp&&r.whatsapp!==r.phone?r.whatsapp:''},
+     {name:'marital',kind:'select',label:'الحالة الاجتماعية',options:MARITAL,default:'single'},
+     {name:'family',kind:'number',label:'عدد الأفراد',max:3,req:false,maxVal:99},
+     {name:'reward',kind:'money',label:'المكافأة الشهرية (₪)',max:10,err:'أدخل قيمة المكافأة'},
+     {name:'job',kind:'text',label:'المسمى أو المهمة',max:60,req:false}],
+    {name:'active',kind:'checkbox',label:'على رأس العمل',default:true,get:r=>r.active!==0},
+    {name:'note',kind:'textarea',label:'ملاحظات',max:300}
+  ],
+  normalize:(out)=>({...out,whatsapp:out.whatsapp||out.phone,family:out.family??null,active:out.active?1:0})
+};
 function openStaffEdit(s=null){
   let thumb=safeThumb(s?.thumb);
-  Dlg.open({title:s?`تعديل «${s.name}»`:'موظف جديد',body:html`<form class="form" novalidate data-stf>
-    <div class="photo-pick"><span data-ph>${avatarH(s?.name||'؟','staff',thumb,'lg')}</span><div class="btn-row"><label class="btn btn-line btn-sm" for="stf-ph">${icon('camera','sm')}<span>${thumb?'تغيير الصورة':'إضافة صورة'}</span></label><input id="stf-ph" type="file" accept="image/*" hidden><button type="button" class="btn btn-ghost btn-sm" data-ph-del${thumb?'':raw(' hidden')}>${icon('trash','sm')}<span>إزالة</span></button></div></div>
-    ${fieldH({name:'name',label:'الاسم',value:s?.name||'',max:80})}
-    <div class="form-grid">${fieldH({name:'phone',label:'رقم الجوال',value:s?.phone?fmtPhone(s.phone):'',dir:'ltr',mode:'tel',max:20})}${fieldH({name:'whatsapp',label:'رقم الواتساب (إن اختلف)',value:s?.whatsapp&&s.whatsapp!==s.phone?fmtPhone(s.whatsapp):'',dir:'ltr',mode:'tel',max:20,req:false})}
-    ${selectH('marital','الحالة الاجتماعية',MARITAL,s?.marital||'single')}${fieldH({name:'family',label:'عدد الأفراد',value:s?.family??'',dir:'ltr',mode:'numeric',max:3,req:false})}
-    ${fieldH({name:'reward',label:'المكافأة الشهرية (₪)',value:s?.reward??'',dir:'ltr',mode:'decimal',max:10})}${fieldH({name:'job',label:'المسمى أو المهمة',value:s?.job||'',max:60,req:false})}</div>
-    <label class="check"><input type="checkbox" name="active"${s?.active===0?'':raw(' checked')}><span>على رأس العمل</span></label>
-    ${noteH('note','ملاحظات',s?.note||'')}${errH()}<button class="btn btn-primary" type="submit">${icon('check','sm')}<span>حفظ</span></button></form>`,
-  onMount(b){const f=$('form',b);
-    const paintPh=()=>{$('[data-ph]',f).replaceChildren(toFrag(avatarH(clean(f.elements.name.value,80)||s?.name||'؟','staff',thumb,'lg')));$('[data-ph-del]',f).hidden=!thumb;$('label[for=stf-ph] span',f).textContent=thumb?'تغيير الصورة':'إضافة صورة'};
-    f.addEventListener('change',async e=>{
-      if(e.target.id!=='stf-ph')return;const file=e.target.files?.[0];e.target.value='';if(!file)return;
-      try{
-        if(!/^image\//.test(file.type||''))throw new DataError('الملف ليس صورة');if(file.size>30*1048576)throw new DataError('الصورة أكبر من 30MB');
-        const d=await decodeImage(file);thumb=thumbOf(d.img,d.w,d.h);d.close();paintPh();
-      }catch(err){toast(err.message,'error',6000)}
-    });
-    f.addEventListener('click',e=>{if(e.target.closest('[data-ph-del]')){thumb='';paintPh()}});
-    f.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f);
-    try{await withBusy(f,async()=>{
-      const name=clean(fd.get('name'),80);if(!name)throw new DataError('أدخل الاسم');
-      const phone=normPhone(fd.get('phone'));if(!phone)throw new DataError('أدخل رقم الجوال');
-      const reward=numIn(fd.get('reward'));if(reward==null||reward<0||reward>1e6)throw new DataError('أدخل قيمة المكافأة');
-      const fam=numIn(fd.get('family')),m=String(fd.get('marital'));
-      await repo.save('staff',{...(s?{id:s.id}:{}),name,phone,whatsapp:normPhone(fd.get('whatsapp'))||phone,marital:MARITAL.some(x=>x[0]===m)?m:'single',family:fam!=null?clamp(Math.round(fam),0,99):null,reward,job:clean(fd.get('job'),60),active:fd.get('active')==='on'?1:0,note:clean(fd.get('note'),300),thumb});
-    });Dlg.close();toast('حُفظت بيانات الموظف','ok')}catch(err){formErr(f,err)}})}});
+  const paintPh=f=>{$('[data-ph]',f).replaceChildren(toFrag(avatarH(clean(f.elements.name.value,80)||s?.name||'؟','staff',thumb,'lg')));$('[data-ph-del]',f).hidden=!thumb;$('label[for=stf-ph] span',f).textContent=thumb?'تغيير الصورة':'إضافة صورة'};
+  entityForm(STAFF_SCHEMA,s,{
+    editTitle:()=>`تعديل «${s.name}»`,
+    before:()=>html`<div class="photo-pick"><span data-ph>${avatarH(s?.name||'؟','staff',thumb,'lg')}</span><div class="btn-row"><label class="btn btn-line btn-sm" for="stf-ph">${icon('camera','sm')}<span>${thumb?'تغيير الصورة':'إضافة صورة'}</span></label><input id="stf-ph" type="file" accept="image/*" hidden><button type="button" class="btn btn-ghost btn-sm" data-ph-del${thumb?'':raw(' hidden')}>${icon('trash','sm')}<span>إزالة</span></button></div></div>`,
+    mount:f=>{
+      f.addEventListener('change',async e=>{
+        if(e.target.id!=='stf-ph')return;const file=e.target.files?.[0];e.target.value='';if(!file)return;
+        try{
+          if(!/^image\//.test(file.type||''))throw new DataError('الملف ليس صورة');if(file.size>30*1048576)throw new DataError('الصورة أكبر من 30MB');
+          const d=await decodeImage(file);thumb=thumbOf(d.img,d.w,d.h);d.close();paintPh(f);
+        }catch(err){toast(err.message,'error',6000)}
+      });
+      f.addEventListener('click',e=>{if(e.target.closest('[data-ph-del]')){thumb='';paintPh(f)}});
+    },
+    collect:()=>({thumb})
+  });
 }
 function openPay(s,{month=monthKey()}={}){
   Dlg.open({title:`صرف لـ ${s.name}`,body:html`<form class="form" novalidate data-pay><div class="form-grid">
@@ -6887,26 +6952,30 @@ async function readBeneficiaries(file){
   const keep=[];let size=0;for(const r of body){size+=JSON.stringify(r).length;if(size>600000)break;keep.push(r)}
   return{head,rows:keep,count:body.length,file:clean(file.name,80),at:Date.now()};
 }
+const PROJECT_SCHEMA={id:'projects',store:'projects',noun:'مشروع',savedMsg:'حُفظ المشروع',saveLabel:'حفظ المشروع',
+  fields:[
+    {name:'name',kind:'text',label:'اسم المشروع',max:100,err:'أدخل اسم المشروع'},
+    [{name:'funder',kind:'text',label:'الجهة الممولة',max:80,err:'أدخل الجهة الممولة'},
+     {name:'date',kind:'date',label:'تاريخ التنفيذ',today:true,err:'حدّد تاريخ التنفيذ'},
+     {name:'currency',kind:'select',label:'العملة',options:()=>curOpts(),default:'USD'},
+     {name:'approved',kind:'money',label:'قيمة الاعتماد',max:12,err:'أدخل قيمة الاعتماد'},
+     {name:'exec',kind:'money',label:'مبلغ التنفيذ',max:12,req:false,noRange:true},
+     {name:'benCount',kind:'number',label:'عدد المستفيدين',max:7,req:false,maxVal:9999999}],
+    {name:'bensSlot',kind:'slot'},
+    {name:'note',kind:'textarea',label:'ملاحظات',max:400}
+  ]
+};
 function openProjectEdit(p=null){
   let bens=p?.bens||null;
-  Dlg.open({title:p?`تعديل «${p.name}»`:'مشروع جديد',body:html`<form class="form" novalidate data-pjf>
-    ${fieldH({name:'name',label:'اسم المشروع',value:p?.name||'',max:100})}
-    <div class="form-grid">${fieldH({name:'funder',label:'الجهة الممولة',value:p?.funder||'',max:80})}${dateH('date','تاريخ التنفيذ',p?.date||localDate())}
-    ${selectH('currency','العملة',curOpts(),p?.currency||'USD')}${fieldH({name:'approved',label:'قيمة الاعتماد',value:p?.approved??'',dir:'ltr',mode:'decimal',max:12})}
-    ${fieldH({name:'exec',label:'مبلغ التنفيذ',value:p?.exec??'',dir:'ltr',mode:'decimal',max:12,req:false})}${fieldH({name:'benCount',label:'عدد المستفيدين',value:p?.benCount??'',dir:'ltr',mode:'numeric',max:7,req:false})}</div>
-    <label class="drop" style="padding:var(--s4)">${icon('sheet')}<b data-bf>${bens?`${bens.file} · ${nf.format(bens.count)} مستفيد`:'كشف المستفيدين (Excel أو CSV) — اختياري'}</b><span class="muted">يُحسب عدد المستفيدين تلقائياً من الكشف</span><input type="file" hidden accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-bfile></label>
-    ${noteH('note','ملاحظات',p?.note||'')}${errH()}<button class="btn btn-primary" type="submit">${icon('check','sm')}<span>حفظ المشروع</span></button></form>`,
-  onMount(b){const f=$('form',b);
-    f.addEventListener('change',async e=>{if(!e.target.matches('[data-bfile]'))return;const file=e.target.files?.[0];e.target.value='';if(!file)return;const lb=$('[data-bf]',f);lb.textContent='جارٍ القراءة…';
-      try{bens=await readBeneficiaries(file);lb.textContent=`${bens.file} · ${nf.format(bens.count)} مستفيد`;f.elements.benCount.value=String(bens.count)}catch(err){lb.textContent=err.message;bens=p?.bens||null}});
-    f.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f);
-      try{await withBusy(f,async()=>{
-        const name=clean(fd.get('name'),100);if(!name)throw new DataError('أدخل اسم المشروع');const funder=clean(fd.get('funder'),80);if(!funder)throw new DataError('أدخل الجهة الممولة');
-        const date=parseDateAny(fd.get('date')).iso;if(!date)throw new DataError('حدّد تاريخ التنفيذ');
-        const approved=numIn(fd.get('approved'));if(approved==null||approved<0)throw new DataError('أدخل قيمة الاعتماد');
-        const exec=numIn(fd.get('exec')),bc=numIn(fd.get('benCount')),cur=clean(fd.get('currency'),8).toUpperCase()||'USD';
-        await repo.save('projects',{...(p?{id:p.id}:{}),name,funder,date,currency:cur,approved,exec:exec??0,benCount:bc!=null?Math.max(0,Math.round(bc)):(bens?.count||0),bens,note:clean(fd.get('note'),400)});
-      });Dlg.close();toast('حُفظ المشروع','ok')}catch(err){formErr(f,err)}})}});
+  entityForm(PROJECT_SCHEMA,p,{
+    editTitle:()=>`تعديل «${p.name}»`,
+    slots:{bensSlot:()=>html`<label class="drop" style="padding:var(--s4)">${icon('sheet')}<b data-bf>${bens?`${bens.file} · ${nf.format(bens.count)} مستفيد`:'كشف المستفيدين (Excel أو CSV) — اختياري'}</b><span class="muted">يُحسب عدد المستفيدين تلقائياً من الكشف</span><input type="file" hidden accept=".xlsx,.csv,.txt,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" data-bfile></label>`},
+    mount:f=>{
+      f.addEventListener('change',async e=>{if(!e.target.matches('[data-bfile]'))return;const file=e.target.files?.[0];e.target.value='';if(!file)return;const lb=$('[data-bf]',f);lb.textContent='جارٍ القراءة…';
+        try{bens=await readBeneficiaries(file);lb.textContent=`${bens.file} · ${nf.format(bens.count)} مستفيد`;f.elements.benCount.value=String(bens.count)}catch(err){lb.textContent=err.message;bens=p?.bens||null}});
+    },
+    collect:(fd,record,vals)=>({bens,benCount:vals.benCount!=null?vals.benCount:(bens?.count||0),exec:vals.exec??0})
+  });
 }
 function projectView(id){
   const canW=repo.can('projects.write'),canDel=repo.can('projects.delete');let tk=0,p=null;
@@ -6972,31 +7041,31 @@ VIEWS.expenses=function(){
   effect(()=>{repo.rev('expenses')();repo.rev('settings')();paint()});
   return el;
 };
+const expenseSchema=cats=>({id:'expenses',store:'expenses',noun:'مصروف',savedMsg:'حُفظ المصروف',
+  fields:[
+    [{name:'date',kind:'date',label:'التاريخ',today:true,err:'حدّد التاريخ',noFuture:true},
+     {name:'cat',kind:'select',label:'البند',options:()=>cats.map(c=>[c[0],c[1]]),default:'transport'},
+     {name:'amount',kind:'money',label:'المبلغ',max:12,gt0:true,err:'أدخل المبلغ'},
+     {name:'currency',kind:'select',label:'العملة',options:()=>curOpts(),default:'ILS'}],
+    {name:'desc',kind:'text',label:'البيان (مثلاً: مواصلات توزيع الكفالات)',max:120,err:'اكتب البيان'},
+    [{name:'payee',kind:'text',label:'المستفيد / الجهة',max:80,req:false},
+     {name:'method',kind:'select',label:'طريقة الدفع',options:OPTS.spMethod,default:'cash'}],
+    {name:'invoiceSlot',kind:'slot'}
+  ]
+});
 function openExpense(x,cats){
   let inv=x?.invoiceId||'',pend=null;
-  Dlg.open({title:x?'تعديل مصروف':'مصروف جديد',body:html`<form class="form" novalidate data-xf><div class="form-grid">
-    ${dateH('date','التاريخ',x?.date||localDate())}${selectH('cat','البند',cats.map(c=>[c[0],c[1]]),x?.cat||'transport')}
-    ${fieldH({name:'amount',label:'المبلغ',value:x?.amount??'',dir:'ltr',mode:'decimal',max:12})}${selectH('currency','العملة',curOpts(),x?.currency||'ILS')}</div>
-    ${fieldH({name:'desc',label:'البيان (مثلاً: مواصلات توزيع الكفالات)',value:x?.desc||'',max:120})}
-    <div class="form-grid">${fieldH({name:'payee',label:'المستفيد / الجهة',value:x?.payee||'',max:80,req:false})}${selectH('method','طريقة الدفع',OPTS.spMethod,x?.method||'cash')}</div>
-    <div class="m-tile notice-up"><label class="m-ph${inv?' has':''}" data-ph>${icon('receipt')}<span>${inv?'استبدال':'الفاتورة'}</span><input type="file" accept="image/*" hidden data-inv></label><div class="r-t"><b>صورة الفاتورة</b><p class="m-st" data-mst>${inv?'مرفقة':'اختياري'}</p>${inv?html`<button type="button" class="btn btn-ghost btn-sm" data-iview>${icon('eye','sm')}<span>عرض</span></button>`:''}</div></div>
-    ${errH()}<div class="btn-row"><button class="btn btn-primary" type="submit">${icon('check','sm')}<span>حفظ</span></button>${x&&repo.can('expenses.delete')?html`<button type="button" class="btn btn-ghost" data-xdel>${icon('trash','sm')}<span>حذف</span></button>`:''}</div></form>`,
-  onMount(b){const f=$('form',b);
-    f.addEventListener('change',async e=>{if(!e.target.matches('[data-inv]'))return;const file=e.target.files?.[0];e.target.value='';if(!file)return;const st=$('[data-mst]',f),ph=$('[data-ph]',f);ph.classList.add('m-busy');
-      try{pend=await compressImage(file,'invoice',m=>{st.textContent=m});ph.querySelector('img')?.remove();ph.prepend(Object.assign(document.createElement('img'),{src:URL.createObjectURL(pend.blob),alt:''}));ph.classList.add('has');st.replaceChildren(toFrag(sizeDelta(pend.before,pend.after)))}catch(err){st.textContent=err.message}finally{ph.classList.remove('m-busy')}});
-    f.addEventListener('click',async e=>{
-      if(e.target.closest('[data-iview]')&&inv){try{const bl=await repo.getMedia(inv);if(bl){const u=URL.createObjectURL(bl);setTimeout(()=>URL.revokeObjectURL(u),120e3);open(u,'_blank','noopener')}}catch(err){toast(err.message,'error')}return}
-      if(e.target.closest('[data-xdel]')){if(!(await Dlg.confirm({title:'حذف المصروف؟',text:'ينتقل إلى سلة المحذوفات.',ok:'حذف',danger:true})))return;try{await repo.remove('expenses',x.id);toast('حُذف المصروف','ok')}catch(err){toast(err.message,'error')}}
-    });
-    f.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f);
-      try{await withBusy(f,async()=>{
-        const date=parseDateAny(fd.get('date')).iso;if(!date)throw new DataError('حدّد التاريخ');if(date>localDate())throw new DataError('التاريخ في المستقبل');
-        const amount=numIn(fd.get('amount'));if(amount==null||amount<=0||amount>1e7)throw new DataError('أدخل المبلغ');
-        const cat=String(fd.get('cat')),desc=clean(fd.get('desc'),120);if(!cats.some(c=>c[0]===cat))throw new DataError('اختر البند');if(!desc)throw new DataError('اكتب البيان');
-        if(pend)inv=await repo.putInvoice(pend.blob,{origSize:pend.before,w:pend.w,h:pend.h});
-        await repo.save('expenses',{...(x?{id:x.id}:{}),date,cat,amount,currency:clean(fd.get('currency'),8).toUpperCase()||'ILS',desc,payee:clean(fd.get('payee'),80),method:optKey('spMethod',fd.get('method'))||'',invoiceId:inv});
-      });Dlg.close();toast('حُفظ المصروف','ok')}catch(err){formErr(f,err)}});
-  }});
+  entityForm(expenseSchema(cats),x,{
+    slots:{invoiceSlot:()=>html`<div class="m-tile notice-up"><label class="m-ph${inv?' has':''}" data-ph>${icon('receipt')}<span>${inv?'استبدال':'الفاتورة'}</span><input type="file" accept="image/*" hidden data-inv></label><div class="r-t"><b>صورة الفاتورة</b><p class="m-st" data-mst>${inv?'مرفقة':'اختياري'}</p>${inv?html`<button type="button" class="btn btn-ghost btn-sm" data-iview>${icon('eye','sm')}<span>عرض</span></button>`:''}</div></div>`},
+    deleteBtn:()=>repo.can('expenses.delete')?html`<button type="button" class="btn btn-ghost" data-ent-del>${icon('trash','sm')}<span>حذف</span></button>`:'',
+    onDelete:async()=>{if(!(await Dlg.confirm({title:'حذف المصروف؟',text:'ينتقل إلى سلة المحذوفات.',ok:'حذف',danger:true})))return;try{await repo.remove('expenses',x.id);toast('حُذف المصروف','ok')}catch(err){toast(err.message,'error')}},
+    mount:f=>{
+      f.addEventListener('change',async e=>{if(!e.target.matches('[data-inv]'))return;const file=e.target.files?.[0];e.target.value='';if(!file)return;const st=$('[data-mst]',f),ph=$('[data-ph]',f);ph.classList.add('m-busy');
+        try{pend=await compressImage(file,'invoice',m=>{st.textContent=m});ph.querySelector('img')?.remove();ph.prepend(Object.assign(document.createElement('img'),{src:URL.createObjectURL(pend.blob),alt:''}));ph.classList.add('has');st.replaceChildren(toFrag(sizeDelta(pend.before,pend.after)))}catch(err){st.textContent=err.message}finally{ph.classList.remove('m-busy')}});
+      f.addEventListener('click',async e=>{if(e.target.closest('[data-iview]')&&inv){try{const bl=await repo.getMedia(inv);if(bl){const u=URL.createObjectURL(bl);setTimeout(()=>URL.revokeObjectURL(u),120e3);open(u,'_blank','noopener')}}catch(err){toast(err.message,'error')}}});
+    },
+    collect:async()=>({invoiceId:pend?await repo.putInvoice(pend.blob,{origSize:pend.before,w:pend.w,h:pend.h}):inv})
+  });
 }
 async function openExpCats(){
   let cats=await expCats();
