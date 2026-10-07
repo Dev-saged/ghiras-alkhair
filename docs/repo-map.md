@@ -31,7 +31,7 @@ JS(~1124-7350): ثوابت1126·أدوات1152·إشارات1188·حالة1209·
 
 ## Solved bugs (never reintroduce)
 - v1.3.1 صور: `compressImage` يقرأ الملف فوراً ويكشف الصيغة من البايتات (`sniffImage`) ولا يثق بـfile.type؛ HEIC يُحوَّل في iframe معزول `heic-frame.html`+`heic2any.min.js` (يحتاج eval، فلا تُخفَّف CSP الصفحة). SW: طلبات iframe لا تُخزَّن كصفحة التطبيق.
-- v1.3.1 تدقيق: كان `audit` محلياً بلا مزامنة فلا يرى المدير نشاط غيره. الآن `Cloud.pushAudit` يرفع (مجموعة `audit`، وثيقة/صف بمعرّف HLC) و`cloudApplyAudit` يسحب للمدير؛ يحتاج قاعدة Firestore (docs/firestore-audit-rules.md). صفوف sync/seed/backup محلية فقط (تجنّب حلقة).
+- v1.3.1 تدقيق: كان `audit` محلياً بلا مزامنة. الآن `Cloud.pushAudit`/`cloudApplyAudit` (مجموعة `audit`؛ تحتاج قاعدة: docs/firestore-audit-rules.md). صفوف sync/seed/backup محلية (تجنّب حلقة).
 
 ## Open issues
 - ترقيم أقسام JS فيه فجوات وتكرار (١٣،٤١) — للعلم فقط.
