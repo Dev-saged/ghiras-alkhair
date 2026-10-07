@@ -3818,50 +3818,8 @@ function orphanListView(){
 }
 function kvRow(label,value,{wide=false,reveal=null,cls=''}={}){return html`<div class="${wide?'wide':''}"><small>${label}</small><span class="rv"><b class="${cls}" ${reveal?raw(`data-rv-val="${esc(reveal)}"`):''}>${value==null||value===''?'—':value}</b>${reveal?html`<button type="button" data-reveal="${reveal}" aria-label="إظهار">${icon('eye','sm')}</button>`:''}</span></div>`}
 function orphanProfileView(id){
-  const el=viewShell(html`<div class="skel" style="height:280px;border-radius:30px"></div><div class="skel" style="height:220px;border-radius:24px"></div>`);
-  el.dataset.title='ملف اليتيم';
   const onDispose=disposer();const urls=[];onDispose(()=>urls.forEach(u=>URL.revokeObjectURL(u)));
-  let data=null;
-  async function paint(){
-    try{data=await Orphans.load(id)}catch(e){el.replaceChildren(toFrag(html`<div class="card empty">${illustration('alert')}<h4>تعذّر فتح الملف</h4><p>${e.message}</p></div>`));return}
-    if(!data){el.replaceChildren(toFrag(html`<div class="card empty">${illustration('orphans')}<h4>الملف غير موجود</h4><p>ربما حُذف؛ راجع سلة المحذوفات.</p><a class="btn btn-ghost" href="#/orphans">العودة للقائمة</a></div>`));return}
-    const{o,g,w,d,acc,media}=data;const a=ageOf(o.dob);const miss=Orphans.missing({...o,nid:o.nid});
-    const canW=repo.can('orphans.write'),canDel=repo.can('orphans.delete'),fin=repo.can('finance.read'),admin=repo.can('users.manage');
-    let sps=[];if(fin)sps=await repo.list('sponsorships',{index:'orphanId',query:id,pii:'none'}).catch(()=>[]);
-    const months=monthStates(sps);
-    const phone=o.contactPhone,wa=o.whatsapp||o.contactPhone;
-    el.replaceChildren(toFrag(html`
-      <section class="o-hero rise" style="--i:0">${portraitRing(o,128,{cls:'lg'})}<h2>${o.nameAr}</h2>${o.nameEn?html`<p class="muted" dir="ltr">${o.nameEn}</p>`:''}
-        <div class="chips"><span class="chip num">OR${o.code}</span>${a?html`<span class="chip">${ageLabel(a)}</span>`:''}${o.status?html`<span class="chip ${o.status==='active'?'ok':o.status==='suspended'?'bad':'warn'}">${optLabel('status',o.status)}</span>`:''}${o.region?html`<span class="chip">${o.region}</span>`:''}${o.lossType?html`<span class="chip">${optLabel('lossType',o.lossType)}</span>`:''}${o.approvedBy?html`<span class="chip stamp" title="${o.approvedAt?fmtDate(o.approvedAt):''}">${icon('check','sm')}<span>معتمد من ${o.approvedBy}</span></span>`:''}</div>
-        <div class="btn-row">${canW?html`<a class="btn btn-primary btn-sm" href="#/orphans/${o.id}/edit">${icon('edit','sm')}<span>تعديل</span></a>`:''}${wa?html`<a class="btn btn-line btn-sm" href="${safeUrl('https://wa.me/'+wa)}" target="_blank" rel="noopener noreferrer">${icon('chat','sm')}<span>واتساب</span></a>`:''}${phone?html`<a class="btn btn-line btn-sm" href="${safeUrl('tel:+'+phone)}">${icon('phone','sm')}<span>اتصال</span></a>`:''}<button type="button" class="btn btn-line btn-sm" data-doc-card>${icon('card','sm')}<span>البطاقة</span></button>${fin&&repo.can('reports.read')?html`<a class="btn btn-line btn-sm" href="#/reports/o:${o.id}">${icon('receipt','sm')}<span>كشف حساب</span></a>`:''}${canDel?html`<button type="button" class="btn btn-ghost btn-icon" data-del aria-label="حذف">${icon('trash','sm')}</button>`:''}</div>
-        ${miss.length?html`<p class="miss-note">ناقص لاكتمال الملف: ${miss.map(fieldLabel).join('، ')}</p>`:''}</section>
-      ${fin?html`<div class="grid-2 rise" style="--i:1"><section class="card sec-card"><header><h3>${icon('leaf')}نمو الكفالة</h3><small>آخر 12 شهراً</small></header>${growthRing(months)}</section>
-        <section class="card sec-card"><header><h3>${icon('calendar')}الأشهر</h3><small>الأحدث أولاً</small></header>${monthsStrip(months,o.id)}${repo.can('finance.write')?html`<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" data-sp-open="${o.id}|${monthKey()}">${icon('plus','sm')}<span>تسجيل كفالة ${monthName(monthKey())}</span></button></div>`:''}${o.sponsorUSD?html`<p class="muted">مبلغ الكفالة: <b class="num">$${nf.format(o.sponsorUSD)}</b></p>`:''}</section></div>`:''}
-      <section class="card sec-card rise" style="--i:2"><header><h3>${icon('orphans')}بيانات الطفل</h3></header><div class="kv">
-        ${kvRow('رقم الهوية',html`<span class="num">${o.nid||'—'}</span>`,{reveal:o.nid&&repo.can('pii.nid')?'orphans:'+o.id+':nid':null})}${kvRow('تاريخ الميلاد',html`<span class="num">${o.dob||'—'}</span>`)}${kvRow('العمر',ageLabel(a))}${kvRow('الجنس',optLabel('gender',o.gender))}
-        ${kvRow('اسم الشهيد',o.martyrName)}${kvRow('تاريخ الاستشهاد',html`<span class="num">${o.martyrDate||'—'}</span>`)}</div></section>
-      <section class="card sec-card rise" style="--i:3"><header><h3>${icon('user')}الوصي والتواصل</h3></header><div class="kv">
-        ${kvRow('اسم الوصي',o.guardianName)}${kvRow('صلة القرابة',optLabel('guardianRelation',o.guardianRelation))}
-        ${kvRow('هوية الوصي',html`<span class="num">${g?.nid||'—'}</span>`,{reveal:g?.nid&&repo.can('pii.nid')?'guardians:'+g.id+':nid':null})}${kvRow('رقم التواصل',html`<span class="num">${fmtPhone(phone)||'—'}</span>`)}${kvRow('واتساب',html`<span class="num">${fmtPhone(wa)||'—'}</span>${o.whatsappSame?html` <small>(نفس الرقم)</small>`:''}`)}</div></section>
-      ${fin||repo.can('donors.read')?html`<section class="card sec-card rise" style="--i:4"><header><h3>${icon('sponsor')}الحساب والكفالة</h3>${w?html`<small>إصدار المحفظة <span class="num">${w.version}</span></small>`:''}</header><div class="kv">
-        ${fin?html`${kvRow('نوع الحساب',optLabel('walletType',o.walletType||w?.type))}${kvRow('البنك / المحفظة',o.provider||w?.provider)}${kvRow('رقم الحساب',html`<span class="num">${w?.number||'—'}</span>`,{reveal:w?.number&&repo.can('pii.wallet')?'wallets:'+w.id+':number':null})}${kvRow('صاحب الحساب',o.holderName||w?.holderName)}`:''}
-        ${kvRow('المتبرع المرسل',d?.name)}</div><div data-bind="links"></div>${repo.can('donors.write')?html`<div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-link-add>${icon('link','sm')}<span>ربط متبرع</span></button></div>`:''}</section>`:''}
-      <section class="card sec-card rise" style="--i:5"><header><h3>${icon('image')}المرفقات</h3><small>مشفّرة على الجهاز</small></header><div class="media-grid">${Object.entries(IMG_SPEC).filter(([k])=>mediaNeed(o).includes(k)||media.some(x=>x.kind===k)).map(([k,sp])=>{const m=media.find(x=>x.kind===k);return html`<div class="m-tile"><button type="button" class="m-ph${m?' has':''}" data-view="${m?m.id:''}" ${m?'':raw('disabled')}>${icon(sp.icon)}<span>${m?'':'لا يوجد'}</span></button><b>${sp.label}</b><p class="m-st">${m?html`<span class="num">${fmtSize(m.size)}</span>`:''}</p></div>`})}</div></section>
-      ${repo.can('aid.read')?html`<section class="card sec-card rise" style="--i:6"><header><h3>${icon('aid')}المساعدات</h3>${repo.can('aid.write')?html`<button type="button" class="btn btn-line btn-sm" data-aid-add>${icon('plus','sm')}<span>تسليم</span></button>`:''}</header><div data-bind="aid"><div class="skel" style="height:48px"></div></div></section>`:''}
-      <section class="card sec-card rise" style="--i:6"><header><h3>${icon('followups')}المتابعات</h3>${repo.can('followups.write')?html`<button type="button" class="btn btn-line btn-sm" data-fu-add>${icon('plus','sm')}<span>متابعة</span></button>`:''}</header><div data-bind="fu"><div class="skel" style="height:48px"></div></div></section>
-      ${admin||acc?html`<section class="card sec-card rise" style="--i:7"><header><h3>${icon('key')}حساب اليتيم</h3><span class="chip ${!o.selfLock?'warn':selfEditable(o)?'info':'ok'}">${!o.selfLock?'لم يؤكّد ملفه بعد':selfEditable(o)?'مفتوح للتعديل':'مؤكَّد ومقفل'}</span></header>
-        ${acc?html`<div class="row" style="padding:0">${avatarH(o.nameAr,'orphan',o.thumb,'sm')}<span class="r-t"><b class="num">${acc.username}</b><small>${acc.mustChange?'بكلمة المرور الافتراضية — لم يغيّرها بعد':'غيّر كلمة المرور'} · ${acc.lastLogin?'آخر دخول '+relTime(acc.lastLogin):'لم يدخل بعد'}</small></span></div>
-          ${admin?html`<div class="pw-box"><button type="button" class="btn btn-line btn-sm" data-act="user-reveal" data-id="${acc.id}">${icon('eye','sm')}<span>إظهار كلمة المرور</span></button><button type="button" class="btn btn-line btn-sm" data-temp="${acc.id}">${icon('key','sm')}<span>إعادة للكلمة الافتراضية</span></button></div>`:''}`
-        :html`<p class="muted">لا يوجد حساب لهذا اليتيم بعد.</p>${admin?html`<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" data-mkacc>${icon('plus','sm')}<span>إنشاء الحساب</span></button></div>`:''}`}
-        ${canW?html`<p class="muted">${selfEditable(o)&&o.selfLock?html`مفتوح لليتيم حتى <span class="num">${fmtDate(o.selfUntil)}</span>`:o.selfLock?html`أكّد اليتيم ملفه <span class="num">${o.selfAt?fmtDate(o.selfAt):''}</span>`:'يكمل اليتيم بياناته من حسابه حتى يؤكّدها'}</p><div class="btn-row">${selfEditable(o)&&o.selfLock?html`<button type="button" class="btn btn-line btn-sm" data-self="lock">${icon('lock','sm')}<span>قفل الملف الآن</span></button>`:''}${!selfEditable(o)?html`<button type="button" class="btn btn-line btn-sm" data-self="open">${icon('edit','sm')}<span>فتح التعديل لليتيم</span></button>`:''}</div>`:''}</section>`:''}
-      <section class="card sec-card rise" style="--i:8"><header><h3>${icon('doc')}بيانات إضافية</h3></header><div class="kv">
-        ${kvRow('المدينة',o.city)}${kvRow('السكن',optLabel('housing',o.housing))}${kvRow('مكان الإقامة الحالي',o.residence,{wide:true})}${kvRow('مكان الولادة',o.birthPlace)}${kvRow('رقم القائمة',o.listNo)}${kvRow('اسم الأم',o.motherName)}${kvRow('هوية الأم',html`<span class="num">${o.motherNid||'—'}</span>`,{reveal:o.motherNid&&repo.can('pii.nid')?'orphans:'+o.id+':motherNid':null})}
-        ${o.story?html`<div class="wide"><small>نبذة عن المعاناة</small><p>${o.story}</p></div>`:''}${o.needs?html`<div class="wide"><small>الاحتياجات</small><p>${o.needs}</p></div>`:''}${o.notes?html`<div class="wide"><small>ملاحظات</small><p>${o.notes}</p></div>`:''}</div></section>
-      ${repo.can('audit.read')?html`<section class="card sec-card rise" style="--i:9"><header><h3>${icon('history')}سجل التعديلات</h3></header><div class="list" data-bind="hist"></div></section>`:''}`));
-    hiRes(el,id,urls);
-    if(repo.can('audit.read'))repo.auditFor('orphans',id).then(rows=>{const b=$('[data-bind=hist]',el);if(b)b.replaceChildren(toFrag(rows.length?html`${rows.map(auditItem)}`:html`<p class="muted" style="padding:12px 16px">لا سجلات.</p>`))}).catch(()=>{});
-    paintFu();paintLinks();paintAid();
-  }
+  let el,ready=false;
   async function paintLinks(){
     const box=$('[data-bind=links]',el);if(!box)return;
     let ls=[],ds=[];try{[ls,ds]=await Promise.all([Finance.links(id),repo.list('donors',{pii:'none'})])}catch{return}
@@ -3881,28 +3839,77 @@ function orphanProfileView(id){
     rows.sort((a,b)=>(a.status==='done')-(b.status==='done')||String(a.due).localeCompare(String(b.due)));
     box.replaceChildren(toFrag(rows.length?html`<div class="list">${rows.map(fuItem)}</div>`:html`<p class="muted">لا متابعات مسجلة.</p>`));
   }
-  el.addEventListener('click',async e=>{
-    const q=s=>e.target.closest(s);let n;
-    try{
+  el=entityDetail({
+    id,title:'ملف اليتيم',icon:'orphans',failIcon:'alert',back:'#/orphans',notFound:'الملف غير موجود',notFoundNote:'ربما حُذف؛ راجع سلة المحذوفات.',
+    revs:['orphans','media','users','sponsorships','orphanDonor','donors'],
+    load:async id=>{
+      const data=await Orphans.load(id);if(!data)return{rec:null};
+      const{o,g,w,d,acc,media}=data;let sps=[];
+      if(repo.can('finance.read'))sps=await repo.list('sponsorships',{index:'orphanId',query:id,pii:'none'}).catch(()=>[]);
+      return{rec:o,ctx:{g,w,d,acc,media,months:monthStates(sps),miss:Orphans.missing({...o,nid:o.nid}),a:ageOf(o.dob)}};
+    },
+    avatar:o=>portraitRing(o,128,{cls:'lg'}),
+    name:o=>o.nameAr,
+    sub:o=>o.nameEn?html`<p class="muted" dir="ltr">${o.nameEn}</p>`:'',
+    chips:(o,{a})=>[html`<span class="chip num">OR${o.code}</span>`,a?html`<span class="chip">${ageLabel(a)}</span>`:'',o.status?html`<span class="chip ${o.status==='active'?'ok':o.status==='suspended'?'bad':'warn'}">${optLabel('status',o.status)}</span>`:'',o.region?html`<span class="chip">${o.region}</span>`:'',o.lossType?html`<span class="chip">${optLabel('lossType',o.lossType)}</span>`:'',o.approvedBy?html`<span class="chip stamp" title="${o.approvedAt?fmtDate(o.approvedAt):''}">${icon('check','sm')}<span>معتمد من ${o.approvedBy}</span></span>`:''],
+    actions:o=>{const wa=o.whatsapp||o.contactPhone;return[repo.can('orphans.write')&&{href:`#/orphans/${o.id}/edit`,icon:'edit',label:'تعديل',cls:'btn-primary btn-sm'},
+      wa&&{href:safeUrl('https://wa.me/'+wa),ext:1,icon:'chat',label:'واتساب'},o.contactPhone&&{href:safeUrl('tel:+'+o.contactPhone),icon:'phone',label:'اتصال'},
+      {k:'card',icon:'card',label:'البطاقة'},repo.can('finance.read')&&repo.can('reports.read')&&{href:`#/reports/o:${o.id}`,icon:'receipt',label:'كشف حساب'},
+      repo.can('orphans.delete')&&{k:'del',icon:'trash',cls:'btn-ghost btn-icon',aria:'حذف'}]},
+    heroExtra:(o,c)=>c.miss.length?html`<p class="miss-note">ناقص لاكتمال الملف: ${c.miss.map(fieldLabel).join('، ')}</p>`:'',
+    mid:(o,c)=>repo.can('finance.read')?html`<div class="grid-2 rise" style="--i:1"><section class="card sec-card"><header><h3>${icon('leaf')}نمو الكفالة</h3><small>آخر 12 شهراً</small></header>${growthRing(c.months)}</section>
+        <section class="card sec-card"><header><h3>${icon('calendar')}الأشهر</h3><small>الأحدث أولاً</small></header>${monthsStrip(c.months,o.id)}${repo.can('finance.write')?html`<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" data-sp-open="${o.id}|${monthKey()}">${icon('plus','sm')}<span>تسجيل كفالة ${monthName(monthKey())}</span></button></div>`:''}${o.sponsorUSD?html`<p class="muted">مبلغ الكفالة: <b class="num">$${nf.format(o.sponsorUSD)}</b></p>`:''}</section></div>`:'',
+    sections:(o,c)=>{
+      const{g,w,d,acc,media,a}=c,phone=o.contactPhone,wa=o.whatsapp||o.contactPhone,fin=repo.can('finance.read'),admin=repo.can('users.manage'),canW=repo.can('orphans.write');
+      return[
+        {icon:'orphans',title:'بيانات الطفل',body:html`<div class="kv">
+        ${kvRow('رقم الهوية',html`<span class="num">${o.nid||'—'}</span>`,{reveal:o.nid&&repo.can('pii.nid')?'orphans:'+o.id+':nid':null})}${kvRow('تاريخ الميلاد',html`<span class="num">${o.dob||'—'}</span>`)}${kvRow('العمر',ageLabel(a))}${kvRow('الجنس',optLabel('gender',o.gender))}
+        ${kvRow('اسم الشهيد',o.martyrName)}${kvRow('تاريخ الاستشهاد',html`<span class="num">${o.martyrDate||'—'}</span>`)}</div>`},
+        {icon:'user',title:'الوصي والتواصل',body:html`<div class="kv">
+        ${kvRow('اسم الوصي',o.guardianName)}${kvRow('صلة القرابة',optLabel('guardianRelation',o.guardianRelation))}
+        ${kvRow('هوية الوصي',html`<span class="num">${g?.nid||'—'}</span>`,{reveal:g?.nid&&repo.can('pii.nid')?'guardians:'+g.id+':nid':null})}${kvRow('رقم التواصل',html`<span class="num">${fmtPhone(phone)||'—'}</span>`)}${kvRow('واتساب',html`<span class="num">${fmtPhone(wa)||'—'}</span>${o.whatsappSame?html` <small>(نفس الرقم)</small>`:''}`)}</div>`},
+        (fin||repo.can('donors.read'))&&{icon:'sponsor',title:'الحساب والكفالة',small:w?html`إصدار المحفظة <span class="num">${w.version}</span>`:'',body:html`<div class="kv">
+        ${fin?html`${kvRow('نوع الحساب',optLabel('walletType',o.walletType||w?.type))}${kvRow('البنك / المحفظة',o.provider||w?.provider)}${kvRow('رقم الحساب',html`<span class="num">${w?.number||'—'}</span>`,{reveal:w?.number&&repo.can('pii.wallet')?'wallets:'+w.id+':number':null})}${kvRow('صاحب الحساب',o.holderName||w?.holderName)}`:''}
+        ${kvRow('المتبرع المرسل',d?.name)}</div><div data-bind="links"></div>${repo.can('donors.write')?html`<div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-link-add>${icon('link','sm')}<span>ربط متبرع</span></button></div>`:''}`},
+        {icon:'image',title:'المرفقات',small:'مشفّرة على الجهاز',body:html`<div class="media-grid">${Object.entries(IMG_SPEC).filter(([k])=>mediaNeed(o).includes(k)||media.some(x=>x.kind===k)).map(([k,sp])=>{const m=media.find(x=>x.kind===k);return html`<div class="m-tile"><button type="button" class="m-ph${m?' has':''}" data-view="${m?m.id:''}" ${m?'':raw('disabled')}>${icon(sp.icon)}<span>${m?'':'لا يوجد'}</span></button><b>${sp.label}</b><p class="m-st">${m?html`<span class="num">${fmtSize(m.size)}</span>`:''}</p></div>`})}</div>`},
+        repo.can('aid.read')&&{icon:'aid',title:'المساعدات',head:repo.can('aid.write')?html`<button type="button" class="btn btn-line btn-sm" data-aid-add>${icon('plus','sm')}<span>تسليم</span></button>`:'',body:html`<div data-bind="aid"><div class="skel" style="height:48px"></div></div>`},
+        {icon:'followups',title:'المتابعات',head:repo.can('followups.write')?html`<button type="button" class="btn btn-line btn-sm" data-fu-add>${icon('plus','sm')}<span>متابعة</span></button>`:'',body:html`<div data-bind="fu"><div class="skel" style="height:48px"></div></div>`},
+        (admin||acc)&&{icon:'key',title:'حساب اليتيم',head:html`<span class="chip ${!o.selfLock?'warn':selfEditable(o)?'info':'ok'}">${!o.selfLock?'لم يؤكّد ملفه بعد':selfEditable(o)?'مفتوح للتعديل':'مؤكَّد ومقفل'}</span>`,body:html`
+        ${acc?html`<div class="row" style="padding:0">${avatarH(o.nameAr,'orphan',o.thumb,'sm')}<span class="r-t"><b class="num">${acc.username}</b><small>${acc.mustChange?'بكلمة المرور الافتراضية — لم يغيّرها بعد':'غيّر كلمة المرور'} · ${acc.lastLogin?'آخر دخول '+relTime(acc.lastLogin):'لم يدخل بعد'}</small></span></div>
+          ${admin?html`<div class="pw-box"><button type="button" class="btn btn-line btn-sm" data-act="user-reveal" data-id="${acc.id}">${icon('eye','sm')}<span>إظهار كلمة المرور</span></button><button type="button" class="btn btn-line btn-sm" data-temp="${acc.id}">${icon('key','sm')}<span>إعادة للكلمة الافتراضية</span></button></div>`:''}`
+        :html`<p class="muted">لا يوجد حساب لهذا اليتيم بعد.</p>${admin?html`<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" data-mkacc>${icon('plus','sm')}<span>إنشاء الحساب</span></button></div>`:''}`}
+        ${canW?html`<p class="muted">${selfEditable(o)&&o.selfLock?html`مفتوح لليتيم حتى <span class="num">${fmtDate(o.selfUntil)}</span>`:o.selfLock?html`أكّد اليتيم ملفه <span class="num">${o.selfAt?fmtDate(o.selfAt):''}</span>`:'يكمل اليتيم بياناته من حسابه حتى يؤكّدها'}</p><div class="btn-row">${selfEditable(o)&&o.selfLock?html`<button type="button" class="btn btn-line btn-sm" data-self="lock">${icon('lock','sm')}<span>قفل الملف الآن</span></button>`:''}${!selfEditable(o)?html`<button type="button" class="btn btn-line btn-sm" data-self="open">${icon('edit','sm')}<span>فتح التعديل لليتيم</span></button>`:''}</div>`:''}`},
+        {icon:'doc',title:'بيانات إضافية',body:html`<div class="kv">
+        ${kvRow('المدينة',o.city)}${kvRow('السكن',optLabel('housing',o.housing))}${kvRow('مكان الإقامة الحالي',o.residence,{wide:true})}${kvRow('مكان الولادة',o.birthPlace)}${kvRow('رقم القائمة',o.listNo)}${kvRow('اسم الأم',o.motherName)}${kvRow('هوية الأم',html`<span class="num">${o.motherNid||'—'}</span>`,{reveal:o.motherNid&&repo.can('pii.nid')?'orphans:'+o.id+':motherNid':null})}
+        ${o.story?html`<div class="wide"><small>نبذة عن المعاناة</small><p>${o.story}</p></div>`:''}${o.needs?html`<div class="wide"><small>الاحتياجات</small><p>${o.needs}</p></div>`:''}${o.notes?html`<div class="wide"><small>ملاحظات</small><p>${o.notes}</p></div>`:''}</div>`},
+        repo.can('audit.read')&&{icon:'history',title:'سجل التعديلات',body:html`<div class="list" data-bind="hist"></div>`}];
+    },
+    after:()=>{
+      ready=true;hiRes(el,id,urls);
+      if(repo.can('audit.read'))repo.auditFor('orphans',id).then(rows=>{const b=$('[data-bind=hist]',el);if(b)b.replaceChildren(toFrag(rows.length?html`${rows.map(auditItem)}`:html`<p class="muted" style="padding:12px 16px">لا سجلات.</p>`))}).catch(()=>{});
+      paintFu();paintLinks();paintAid();
+    },
+    on:{
+      card:()=>openDoc('card',id),
+      del:async()=>{if(!(await Dlg.confirm({title:'حذف ملف اليتيم؟',text:'ينتقل الملف إلى سلة المحذوفات ويمكن استعادته خلال 30 يوماً.',ok:'حذف',danger:true})))return;await repo.remove('orphans',id);location.hash='#/orphans';toast('نُقل الملف إلى السلة','ok',6000,{label:'تراجع',fn:async()=>{try{await repo.restore('orphans:'+id);location.hash='#/orphans/'+id}catch(err){toast(err.message,'error')}}})}
+    },
+    onClick:async(e,o,c)=>{
+      const q=s=>e.target.closest(s);let n;
       if((n=q('[data-reveal]'))){const[s,k,f]=n.dataset.reveal.split(':');const v=await repo.reveal(s,k,f);const b=n.parentElement.querySelector('[data-rv-val]');if(b)b.textContent=v||'—';n.remove();return}
       if((n=q('[data-view]'))&&n.dataset.view){const b=await repo.getMedia(n.dataset.view);if(!b)return;const u=URL.createObjectURL(b);urls.push(u);Dlg.open({title:IMG_SPEC[n.dataset.view.split(':')[1]]?.label||'مرفق',body:html`<img class="img-full" src="${u}" alt="">`});return}
       if(q('[data-fu-add]'))return openFuAdd(id);
       if(q('[data-aid-add]'))return openAidAdd(id);
       if((n=q('[data-sp-open]'))){const[oid,m]=n.dataset.spOpen.split('|');return openSpSheet(oid,m)}
-      if(q('[data-doc-card]'))return openDoc('card',id);
       if(q('[data-link-add]'))return openLinkEditor({orphanId:id});
       if((n=q('[data-link-edit]')))return openLinkEditor({orphanId:id,linkId:n.dataset.linkEdit});
       if((n=q('[data-fu-done]'))){await repo.save('followups',{id:n.dataset.fuDone,status:'done',doneAt:localDate()});toast('أُنجزت المتابعة','ok');return}
-      if(q('[data-del]')){if(!(await Dlg.confirm({title:'حذف ملف اليتيم؟',text:'ينتقل الملف إلى سلة المحذوفات ويمكن استعادته خلال 30 يوماً.',ok:'حذف',danger:true})))return;await repo.remove('orphans',id);location.hash='#/orphans';toast('نُقل الملف إلى السلة','ok',6000,{label:'تراجع',fn:async()=>{try{await repo.restore('orphans:'+id);location.hash='#/orphans/'+id}catch(err){toast(err.message,'error')}}});return}
       if((n=q('[data-self]'))){if(n.dataset.self==='open')return openUnlock(id);await repo.save('orphans',{id,selfUntil:0,selfLock:1},{reason:'قفل الملف'});Cloud.sync();toast('قُفل الملف','ok');return}
-      if((n=q('[data-temp]'))){if(!(await Dlg.confirm({title:'إعادة كلمة المرور الافتراضية؟',text:`تعود كلمة المرور إلى ${ORPHAN_PW} ويُطلب تغييرها عند أول دخول، وتُنهى جلساته الحالية.`,ok:'إعادة'})))return;const pw=await repo.resetTempPassword(n.dataset.temp);showCreds([{name:data.o.nameAr,username:data.acc.username,password:pw}]);return}
-      if(q('[data-mkacc]')){const a=await repo.ensureOrphanAccount(data.o);if(a.created)showCreds([{name:data.o.nameAr,username:a.user.username,password:a.password}]);paint();return}
-    }catch(err){toast(err.message,'error')}
+      if((n=q('[data-temp]'))){if(!(await Dlg.confirm({title:'إعادة كلمة المرور الافتراضية؟',text:`تعود كلمة المرور إلى ${ORPHAN_PW} ويُطلب تغييرها عند أول دخول، وتُنهى جلساته الحالية.`,ok:'إعادة'})))return;const pw=await repo.resetTempPassword(n.dataset.temp);showCreds([{name:o.nameAr,username:c.acc.username,password:pw}]);return}
+      if(q('[data-mkacc]')){const a=await repo.ensureOrphanAccount(o);if(a.created)showCreds([{name:o.nameAr,username:a.user.username,password:a.password}]);el.repaint();return}
+    }
   });
-  effect(()=>{repo.rev('orphans')();repo.rev('media')();repo.rev('users')();paint()});
-  effect(()=>{repo.rev('followups')();if(data)paintFu()});
-  effect(()=>{repo.rev('aid')();if(data)paintAid()});
-  effect(()=>{repo.rev('sponsorships')();repo.rev('orphanDonor')();repo.rev('donors')();if(data)paint()});
+  effect(()=>{repo.rev('followups')();if(ready)paintFu()});
+  effect(()=>{repo.rev('aid')();if(ready)paintAid()});
   return el;
 }
 const fuItem=f=>{const late=f.status!=='done'&&f.due<localDate();return html`<div class="fu" data-s="${f.status}"><span class="r-ic">${icon(f.status==='done'?'check':'followups')}</span><span class="r-t"><b>${optLabel('fuType',f.type)}${f.orphanName?html` — <a class="link" style="min-height:0;display:inline" href="#/orphans/${f.orphanId}">${f.orphanName}</a>`:''}</b><small><span class="num">${f.due}</span>${late?html` · <span style="color:var(--danger)">متأخرة</span>`:''}${f.note?html` · ${f.note}`:''}</small></span>${f.status!=='done'&&f.waPhone?html`<a class="btn btn-ghost btn-icon fu-wa" href="${safeUrl('https://wa.me/'+f.waPhone+'?text='+encodeURIComponent(fuWaMsg(f)))}" target="_blank" rel="noopener noreferrer" aria-label="مراسلة عبر واتساب">${icon('wa','sm')}</a>`:''}${f.status!=='done'&&repo.can('followups.write')?html`<button type="button" class="btn btn-ghost btn-icon" data-fu-done="${f.id}" aria-label="تم">${icon('check','sm')}</button>`:''}</div>`};
@@ -6980,14 +6987,16 @@ function entityDetail(cfg){
     :html`<button type="button" class="btn ${a.cls||'btn-line btn-sm'}" data-da="${a.k}"${a.aria?raw(` aria-label="${esc(a.aria)}"`):''}>${icon(a.icon,'sm')}${a.label?html`<span>${a.label}</span>`:''}</button>`;
   async function paint(){
     const t=++tk;let r;
-    try{r=await cfg.load(cfg.id)}catch(e){if(t===tk)el.replaceChildren(toFrag(html`<div class="card empty">${illustration(cfg.icon)}<h4>${cfg.failTitle||'تعذّر فتح الملف'}</h4><p>${e.message||''}</p>${back}</div>`));return}
+    try{r=await cfg.load(cfg.id)}catch(e){if(t===tk)el.replaceChildren(toFrag(html`<div class="card empty">${illustration(cfg.failIcon||cfg.icon)}<h4>${cfg.failTitle||'تعذّر فتح الملف'}</h4><p>${e.message||''}</p>${back}</div>`));return}
     if(t!==tk)return;
-    if(!r.rec){el.replaceChildren(toFrag(html`<div class="card empty">${illustration(cfg.icon)}<h4>${cfg.notFound}</h4>${back}</div>`));return}
+    if(!r.rec){el.replaceChildren(toFrag(html`<div class="card empty">${illustration(cfg.icon)}<h4>${cfg.notFound}</h4>${cfg.notFoundNote?html`<p>${cfg.notFoundNote}</p>`:''}${back}</div>`));return}
     rec=r.rec;ctx=r.ctx;
     const acts=cfg.actions(rec,ctx).filter(Boolean),kp=cfg.kpis?cfg.kpis(rec,ctx):[],sec=cfg.sections(rec,ctx).filter(Boolean);
-    el.replaceChildren(toFrag(html`<section class="o-hero rise" style="--i:0">${cfg.avatar(rec,ctx)}<h2>${cfg.name(rec,ctx)}</h2>${cfg.sub?cfg.sub(rec,ctx):''}<div class="chips">${cfg.chips(rec,ctx)}</div><div class="btn-row">${acts.map(act)}</div></section>
+    el.replaceChildren(toFrag(html`<section class="o-hero rise" style="--i:0">${cfg.avatar(rec,ctx)}<h2>${cfg.name(rec,ctx)}</h2>${cfg.sub?cfg.sub(rec,ctx):''}<div class="chips">${cfg.chips(rec,ctx)}</div><div class="btn-row">${acts.map(act)}</div>${cfg.heroExtra?cfg.heroExtra(rec,ctx):''}</section>
       ${kp.length?html`<div class="fin-kpis rise" style="--i:1">${kp.map(k=>html`<div class="fk"${k.t?raw(` data-t="${esc(k.t)}"`):''}><small>${k.label}</small><b class="num">${k.value}</b>${k.sub?html`<em>${k.sub}</em>`:''}${k.extra||''}</div>`)}</div>`:''}
-      ${sec.map((x,i)=>html`<section class="card sec-card rise" style="--i:${i+2}"><header><h3>${icon(x.icon)}${x.title}</h3>${x.small?html`<small>${x.small}</small>`:''}</header>${x.body}</section>`)}`));
+      ${cfg.mid?cfg.mid(rec,ctx):''}
+      ${sec.map((x,i)=>html`<section class="card sec-card rise" style="--i:${i+2}"><header><h3>${icon(x.icon)}${x.title}</h3>${x.small?html`<small>${x.small}</small>`:''}${x.head||''}</header>${x.body}</section>`)}`));
+    cfg.after?.(el,rec,ctx);
   }
   el.addEventListener('click',async e=>{
     if(!rec)return;
