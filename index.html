@@ -4846,7 +4846,7 @@ VIEWS.sponsorships=function(){
     panel.replaceChildren(toFrag(html`<div class="fin-kpis">${SP_KEYS.map(k=>{const tt=Finance.totals(by[k]);return html`<div class="fk" data-t="${k}"><small>${SP_STATUS[k][0]}</small><b class="num">${nf.format(by[k].length)}</b><em><span class="num">${money(tt.base,B)}</span>${k==='received'&&tt.base?html` · الصافي <span class="num">${money(tt.net,B)}</span>`:''}</em>${unratedH(tt.unrated)}</div>`})}</div>
       <div class="toolbar"><label class="search">${icon('search')}<input type="search" data-q value="${term}" placeholder="الاسم أو الرمز أو المتبرع" autocomplete="off" aria-label="بحث"></label>
         <div class="tool-row"><div class="chips-row">${[['all','الكل'],['active','نشطة'],...SP_KEYS.map(k=>[k,SP_STATUS[k][0]]),['none','بلا سجل']].map(([k,l])=>html`<button type="button" class="chip-btn" data-f="${k}" aria-pressed="${String(filt.peek()===k)}">${l} <span class="num">${cnt[k]}</span></button>`)}</div>
-        <button type="button" class="btn btn-line btn-icon" data-xls aria-label="تصدير Excel">${icon('download','sm')}</button></div></div>
+        <button type="button" class="btn btn-line btn-icon" data-xls aria-label="تصدير Excel">${icon('download','sm')}</button>${canW?html`<button type="button" class="btn btn-line btn-icon" data-sp-import aria-label="استيراد من Excel">${icon('upload','sm')}</button>`:''}</div></div>
       <div class="list" data-rows></div><div data-sentinel style="height:1px"></div>`));
     const box=$('[data-rows]',panel);let list=[],shown=0;
     const row=({o,s})=>{const k=s?spStatus(s.status):'none';return html`<button type="button" class="sp-row" data-sp-open="${o.id}|${m}">${portraitRing(o,44,{pct:false})}<span class="r-t"><b>${o.nameAr||'—'}</b><small><span class="num">OR${o.code}</span>${s?.donorId&&dn.get(s.donorId)?html` · ${dn.get(s.donorId)}`:''}${s?.method?html` · ${optLabel('spMethod',s.method)}`:''}${s?.rev>1?html` · مراجعة <span class="num">${s.rev}</span>`:''}</small></span><span class="amt">${s?html`<b class="num">${money(s.amount,s.currency)}</b>`:''}<span class="chip ${SP_STATUS[k]?.[1]||''}">${SP_STATUS[k]?.[0]||'بلا سجل'}</span></span></button>`};
@@ -4860,6 +4860,7 @@ VIEWS.sponsorships=function(){
       if(e.target.closest('[data-xls]')){const hd=['الرمز','اسم اليتيم','المتبرع','المبلغ','العملة','الحالة','تاريخ الاستلام','الطريقة','رقم العملية',`المعادل (${B})`,`العمولة (${B})`,`الصافي (${B})`,'المراجعة'];
         const data=rows.map(({o,s})=>{const c=s?Finance.convert(s):null;return[`OR${o.code}`,o.nameAr||'',dn.get(s?.donorId)||'',s?Number(s.amount):'',s?.currency||'',s?SP_STATUS[spStatus(s.status)]?.[0]||'':'بلا سجل',s?.receivedDate||'',optLabel('spMethod',s?.method),s?.txnNo||'',c?.rated?c.value:'',c?.rated?c.fee:'',c?.rated?c.net:'',s?.rev||'']});
         download(`ghiras-sponsorships-${m}.xlsx`,Xlsx.write([{name:m,rows:[hd,...data],widths:[10,30,22,10,8,14,14,14,18,14,12,14,9]}]),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');toast('تم تجهيز ملف Excel','ok')}
+      if(e.target.closest('[data-sp-import]'))return openSponsorImport();
     };
   }
   async function paintBatch(){
@@ -4972,6 +4973,142 @@ function openTypeEdit(t=null,all=[]){
     f.addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(f);
       try{await withBusy(f,async()=>{const name=clean(fd.get('name'),40);if(!name)throw new DataError('أدخل اسم النوع');if(all.some(x=>x.id!==t?.id&&normalizeAr(x.name)===normalizeAr(name)))throw new DataError('يوجد نوع بهذا الاسم');await repo.save('aidTypes',{...(t?{id:t.id}:{order:(Math.max(0,...all.map(x=>x.order||0))+1)}),name,unit:clean(fd.get('unit'),16),icon:AID_ICONS.includes(ic)?ic:'aid',cash:cash?1:0,active:active?1:0})});Dlg.close();toast('حُفظ النوع','ok')}catch(err){formErr(f,err)}})}});
 }
+
+/* ══════════ ٤٦ استيراد دفعي بالكود: مساعدات وكفالات من Excel ══════════ */
+function matchDonorByName(name,donors){
+  const n=normalizeAr(clean(name,80));if(!n)return{id:''};
+  let d=donors.find(x=>normalizeAr(x.name)===n);
+  if(!d)d=donors.find(x=>normalizeAr(x.name).includes(n)||n.includes(normalizeAr(x.name)));
+  return d?{id:d.id}:{id:'',warn:`لم يُعثر على متبرع باسم «${name}»`};
+}
+function matchAidType(name,types){
+  const n=normalizeAr(clean(name,60));if(!n)return null;
+  return types.find(x=>normalizeAr(x.name)===n)||types.find(x=>normalizeAr(x.name).includes(n)||n.includes(normalizeAr(x.name)))||null;
+}
+function matchByLabel(opts,cellVal){
+  const raw=clean(cellVal,60),n=normalizeAr(raw);if(!n)return'';
+  const hit=opts.find(([k,l])=>k===raw||normalizeAr(String(l))===n||normalizeAr(k)===n);
+  return hit?hit[0]:'';
+}
+// محرك عام: قالب Excel بالكود -> معاينة (جاهز/خطأ) -> حفظ بالإبقاء على الصفوف الصحيحة -> تقرير أخطاء قابل للتنزيل
+function codeImportDlg(cfg){
+  let sheet=null,plan=null,ctx=null,busy=false;
+  const tpl=()=>{
+    const head=cfg.columns.map(c=>c.label+(c.req?' *':''));
+    const guide=[['العمود','إلزامي','ملاحظات'],...cfg.columns.map(c=>[c.label,c.req?'نعم':'—',c.hint||''])];
+    return Xlsx.write([{name:'البيانات',rows:[head],widths:cfg.columns.map(()=>22)},{name:'دليل الأعمدة',rows:guide,widths:[22,10,56]}]);
+  };
+  const headIdx=head=>{const m={};cfg.columns.forEach((c,i)=>{let hi=head.findIndex(h=>normalizeAr(clean(h,60))===normalizeAr(c.label));m[c.key]=hi<0?i:hi});return m};
+  const cellsOf=(row,idx)=>Object.fromEntries(cfg.columns.map(c=>[c.key,row[idx[c.key]]??'']));
+  const build=()=>{
+    if(!sheet)return html`<div class="imp">
+      <label class="drop" data-drop><span>${icon('sheet')}</span><b>اختر ملف ${cfg.resultNoun}</b><p class="muted">نفس القالب دون تغيير ترتيب الأعمدة.</p><span class="btn btn-primary">${icon('upload','sm')}<span>اختيار ملف</span></span><input type="file" hidden accept=".xlsx,.csv" data-ifile></label>
+      <div class="card stat-card"><span class="medal-sm">${icon('download','lg')}</span><div><b>قالب الاستيراد</b><small>نزّله وعبّه ثم ارفعه هنا.</small></div><div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-tpl>${icon('download','sm')}<span>${cfg.templateName}</span></button></div></div>
+    ${errH()}</div>`;
+    if(!plan)return html`<div class="imp">${skelList(4)}</div>`;
+    const c=k=>plan.filter(x=>x.status===k).length;
+    return html`<div class="imp">
+      <div class="sum-grid"><div><small>جاهز</small><b class="num" style="color:var(--ok)">${c('ready')}</b></div><div><small>أخطاء</small><b class="num" style="color:var(--danger)">${c('error')}</b></div><div><small>الإجمالي</small><b class="num">${plan.length}</b></div></div>
+      <div class="pv-wrap"><table class="pv"><thead><tr><th>#</th><th>الحالة</th><th>الكود</th><th>الاسم</th><th>ملاحظة</th></tr></thead><tbody>${plan.slice(0,300).map(x=>html`<tr data-s="${x.status}"><td class="num">${x.row}</td><td>${x.status==='ready'?'جاهز':'خطأ'}</td><td class="num">${x.code||'—'}</td><td>${x.name||'—'}</td><td>${x.msg||x.warn||''}</td></tr>`)}</tbody></table></div>
+      ${plan.length>300?html`<p class="muted">تُعرض أول 300 صف من <span class="num">${plan.length}</span>.</p>`:''}
+      <div class="btn-row"><button type="button" class="btn btn-ghost" data-back>${icon('chev','sm')}<span>ملف آخر</span></button><button type="button" class="btn btn-primary" data-run${c('ready')?'':raw(' disabled')}>${icon('check','sm')}<span>حفظ ${c('ready')} ${cfg.resultNoun}</span></button></div></div>`;
+  };
+  const repaint=b=>$('[data-body]',b).replaceChildren(toFrag(build()));
+  Dlg.open({title:cfg.title,body:html`<div data-body>${build()}</div>`,onMount(b){
+    const onFile=async file=>{
+      try{
+        if(file.size>20*1048576)throw new DataError('الملف أكبر من 20MB');
+        const sheets=await readTable(file);if(!sheets.length)throw new DataError('الملف لا يحوي بيانات');
+        sheet=sheets[0];ctx=ctx||await cfg.buildCtx();
+        const rows=sheet.rows,head=rows[0]||[],idx=headIdx(head),body=rows.slice(1).filter(r=>r.some(v=>v!==''&&v!=null));
+        plan=body.map((r,i)=>({row:i+2,...cfg.parseRow(cellsOf(r,idx),ctx)}));
+        repaint(b);
+      }catch(err){sheet=null;plan=null;repaint(b);const e_=$('[data-err]',b);if(e_)e_.textContent=err.message}
+    };
+    b.addEventListener('change',e=>{if(e.target.matches('[data-ifile]')){const f=e.target.files?.[0];e.target.value='';if(f)onFile(f)}});
+    b.addEventListener('dragover',e=>{const d=e.target.closest('[data-drop]');if(d){e.preventDefault();d.classList.add('over')}});
+    b.addEventListener('dragleave',e=>e.target.closest('[data-drop]')?.classList.remove('over'));
+    b.addEventListener('drop',e=>{const d=e.target.closest('[data-drop]');if(!d)return;e.preventDefault();d.classList.remove('over');const f=e.dataTransfer?.files?.[0];if(f)onFile(f)});
+    b.addEventListener('click',async e=>{
+      if(e.target.closest('[data-tpl]'))return download(cfg.templateName,tpl(),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      if(e.target.closest('[data-back]')){sheet=null;plan=null;repaint(b);return}
+      const run=e.target.closest('[data-run]');if(!run||busy||run.disabled)return;
+      const ready=plan.filter(x=>x.status==='ready');
+      if(!(await Dlg.confirm({title:`حفظ ${ready.length} ${cfg.resultNoun}؟`,text:'كل صف جاهز يُسجَّل كأنه أُدخل يدوياً؛ راجع سلة المحذوفات للتراجع عن سجل بعينه إن لزم.',ok:'حفظ'})))return;
+      busy=true;run.classList.add('busy');run.disabled=true;const lb=run.querySelector('span');
+      let done=0;const errs=[];
+      for(const x of ready){
+        try{await cfg.commit(x.payload,ctx);done++}
+        catch(err){errs.push({row:x.row,code:x.code,msg:err.message||String(err)})}
+        lb.textContent=`${done+errs.length}/${ready.length}`;
+      }
+      busy=false;
+      const allErrs=[...errs,...plan.filter(x=>x.status==='error').map(x=>({row:x.row,code:x.code,msg:x.msg}))];
+      toast(`حُفظ ${done} من ${ready.length}${allErrs.length?` · أخطاء ${allErrs.length}`:''}`,allErrs.length?'warn':'ok',5000);
+      if(allErrs.length)Dlg.open({title:'تقرير الأخطاء',body:html`<div class="imp"><div class="list">${allErrs.slice(0,200).map(x=>html`<div class="row"><span class="r-ic">${icon('alert')}</span><span class="r-t"><b class="num">${x.code||'—'}</b><small>صف <span class="num">${x.row}</span> — ${x.msg}</small></span></div>`)}</div><div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-dl-errs>${icon('download','sm')}<span>تنزيل التقرير</span></button></div></div>`,
+        onMount(eb){eb.addEventListener('click',e2=>{if(e2.target.closest('[data-dl-errs]'))download(`import-errors-${localDate()}.xlsx`,Xlsx.write([{name:'الأخطاء',rows:[['الصف','الكود','الخطأ'],...allErrs.map(x=>[String(x.row),x.code||'',x.msg])],widths:[8,12,60]}]),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')})}});
+      else Dlg.close();
+    });
+  }});
+}
+async function openAidImport(){
+  if(!repo.can('aid.write'))return;
+  let types,donors;
+  try{await Finance.ready();types=await Finance.aidTypes();donors=repo.can('donors.read')?await repo.list('donors',{pii:'none'}):[]}catch(e){return toast(e.message,'error')}
+  codeImportDlg({
+    title:'استيراد مساعدات من Excel',resultNoun:'مساعدة',templateName:'aid-import-template.xlsx',
+    columns:[
+      {key:'code',label:'كود اليتيم',req:true,hint:'الرقم فقط أو بصيغة OR604'},
+      {key:'date',label:'التاريخ',req:true,hint:'YYYY-MM-DD'},
+      {key:'type',label:'نوع المساعدة',req:true,hint:types.map(t=>t.name).join(' / ')},
+      {key:'qty',label:'الكمية',req:false,hint:'رقم، اختياري'},
+      {key:'value',label:'القيمة',req:false,hint:'إلزامية للمساعدة النقدية'},
+      {key:'currency',label:'العملة',req:false,hint:`افتراضي ${Finance.base}`},
+      {key:'donor',label:'الجهة المانحة',req:false,hint:'اسم المتبرع كما في النظام، اختياري'},
+      {key:'source',label:'المصدر / الحملة',req:false,hint:''},
+      {key:'note',label:'ملاحظة',req:false,hint:''}
+    ],
+    buildCtx:async()=>{const orphans=await repo.list('orphans',{pii:'none'});return{byCode:new Map(orphans.map(o=>[String(o.code),o])),types,donors}},
+    parseRow:(c,ctx)=>{
+      const code=normalizeAr(clean(c.code,20)).replace(/\D/g,'');if(!code)return{status:'error',code:c.code,msg:'بلا كود يتيم'};
+      const o=ctx.byCode.get(code);if(!o)return{status:'error',code,msg:'الكود غير موجود'};
+      const type=matchAidType(c.type,ctx.types);if(!type)return{status:'error',code,name:o.nameAr,msg:`نوع المساعدة «${c.type}» غير معروف`};
+      const dm=matchDonorByName(c.donor,ctx.donors);
+      return{status:'ready',code,name:o.nameAr,warn:dm.warn,payload:{orphanId:o.id,typeId:type.id,date:c.date,qty:c.qty,value:c.value,currency:c.currency,donorId:dm.id,source:clean(c.source,80),note:clean(c.note,300)}};
+    },
+    commit:payload=>Finance.addAid(payload)
+  });
+}
+async function openSponsorImport(){
+  if(!repo.can('finance.write'))return;
+  let donors;
+  try{await Finance.ready();donors=repo.can('donors.read')?await repo.list('donors',{pii:'none'}):[]}catch(e){return toast(e.message,'error')}
+  codeImportDlg({
+    title:'استيراد كفالات شهرية من Excel',resultNoun:'سجل كفالة',templateName:'sponsorships-import-template.xlsx',
+    columns:[
+      {key:'code',label:'كود اليتيم',req:true,hint:'الرقم فقط أو بصيغة OR604'},
+      {key:'month',label:'الشهر',req:true,hint:'YYYY-MM'},
+      {key:'status',label:'الحالة',req:true,hint:SP_KEYS.map(k=>SP_STATUS[k][0]).join(' / ')},
+      {key:'amount',label:'المبلغ',req:false,hint:'إلزامي إلا إذا الحالة «لم تصل»'},
+      {key:'currency',label:'العملة',req:true,hint:'USD / ILS / ...'},
+      {key:'donor',label:'الكافل / المتبرع',req:false,hint:'اسم كما في النظام، اختياري'},
+      {key:'method',label:'طريقة الصرف',req:false,hint:OPTS.spMethod.map(x=>x[1]).join(' / ')},
+      {key:'receivedDate',label:'تاريخ الاستلام',req:false,hint:'إلزامي إذا الحالة «مستلمة» — YYYY-MM-DD'},
+      {key:'txnNo',label:'رقم التحويل',req:false,hint:''},
+      {key:'note',label:'ملاحظة',req:false,hint:''}
+    ],
+    buildCtx:async()=>{const orphans=await repo.list('orphans',{pii:'none'});return{byCode:new Map(orphans.map(o=>[String(o.code),o])),donors}},
+    parseRow:(c,ctx)=>{
+      const code=normalizeAr(clean(c.code,20)).replace(/\D/g,'');if(!code)return{status:'error',code:c.code,msg:'بلا كود يتيم'};
+      const o=ctx.byCode.get(code);if(!o)return{status:'error',code,msg:'الكود غير موجود'};
+      const status=matchByLabel(SP_KEYS.map(k=>[k,SP_STATUS[k][0]]),c.status);if(!status)return{status:'error',code,name:o.nameAr,msg:`حالة «${c.status}» غير معروفة`};
+      const dm=matchDonorByName(c.donor,ctx.donors);
+      return{status:'ready',code,name:o.nameAr,warn:dm.warn,payload:{orphanId:o.id,month:c.month,status,amount:c.amount,currency:c.currency,donorId:dm.id,method:matchByLabel(OPTS.spMethod,c.method),receivedDate:c.receivedDate,txnNo:clean(c.txnNo,60),note:clean(c.note,300)}};
+    },
+    commit:payload=>Finance.record(payload)
+  });
+}
+
 VIEWS.aid=function(){
   const canW=repo.can('aid.write');
   const TABS=[['log','السجل','aid'],...(canW?[['dist','توزيع دفعي','orphans']]:[]),['types','الأنواع','box']];
@@ -4989,11 +5126,12 @@ VIEWS.aid=function(){
     const groups=new Map();for(const a of recs){const g=groups.get(a.typeId)||[];g.push(a);groups.set(a.typeId,g)}
     const all=Finance.totals(aidVals(recs)),kids=new Set(recs.map(a=>a.orphanId)).size;
     const tyOf=a=>tm.get(a.typeId)||{name:a.typeName||'—',icon:'aid',unit:a.unit||''};
-    panel.replaceChildren(toFrag(html`<div class="card stat-card"><span class="medal-sm">${icon('aid','lg')}</span><div><b><span class="num">${nf.format(recs.length)}</span> تسليم · <span class="num">${nf.format(kids)}</span> يتيم</b><small>القيمة الموحّدة <span class="num">${money(all.base,B)}</span></small>${unratedH(all.unrated)}</div>${canW?html`<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" data-aid-add>${icon('plus','sm')}<span>تسليم مساعدة</span></button></div>`:''}</div>
+    panel.replaceChildren(toFrag(html`<div class="card stat-card"><span class="medal-sm">${icon('aid','lg')}</span><div><b><span class="num">${nf.format(recs.length)}</span> تسليم · <span class="num">${nf.format(kids)}</span> يتيم</b><small>القيمة الموحّدة <span class="num">${money(all.base,B)}</span></small>${unratedH(all.unrated)}</div>${canW?html`<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" data-aid-add>${icon('plus','sm')}<span>تسليم مساعدة</span></button><button type="button" class="btn btn-line btn-sm" data-aid-import>${icon('upload','sm')}<span>استيراد من Excel</span></button></div>`:''}</div>
       ${groups.size?html`<div class="aid-sum">${[...groups.entries()].map(([id,g])=>{const ty=tyOf(g[0]),q=g.reduce((s,a)=>s+(Number(a.qty)||0),0),tt=Finance.totals(aidVals(g));return html`<div class="as"><span class="type-ic">${icon(ty.icon||'aid')}</span><small>${ty.name}</small><b class="num">${nf.format(g.length)}</b><small>${q?html`<span class="num">${nf2.format(q)}</span> ${ty.unit||''}`:''}${tt.base?html` · <span class="num">${money(tt.base,B)}</span>`:''}</small></div>`})}</div>`:''}
       ${recs.length?html`<div class="list">${recs.slice(0,300).map(a=>{const ty=tyOf(a),o=on.get(a.orphanId);return html`<button type="button" class="row" data-aid="${a.id}"><span class="type-ic">${icon(ty.icon||'aid')}</span><span class="r-t"><b>${ty.name} — ${o?.nameAr||'—'}</b><small><span class="num">${a.date}</span>${a.qty?html` · <span class="num">${nf2.format(a.qty)}</span> ${a.unit||ty.unit||''}`:''}${a.value!=null?html` · <span class="num">${money(a.value,a.currency)}</span>`:''}${a.donorId&&dn.get(a.donorId)?html` · ${dn.get(a.donorId)}`:''}${a.source?html` · ${a.source}`:''}</small></span></button>`})}</div>${recs.length>300?html`<p class="muted">يُعرض أحدث 300 تسليم.</p>`:''}`:html`<div class="card empty compact">${illustration('aid')}<h4>لا مساعدات في ${monthName(m)}</h4><p>سجّل تسليماً فردياً أو وزّع دفعة على مجموعة أيتام.</p></div>`}`));
     panel.onclick=async e=>{
       if(e.target.closest('[data-aid-add]'))return openAidAdd();
+      if(e.target.closest('[data-aid-import]'))return openAidImport();
       const r_=e.target.closest('[data-aid]');if(!r_)return;const a=recs.find(x=>x.id===r_.dataset.aid);if(!a)return;const ty=tyOf(a),o=on.get(a.orphanId),c=a.value!=null?Finance.convert({amount:a.value,currency:a.currency,date:a.date,base:a.base,rate:a.rate}):null;
       Dlg.open({title:ty.name,body:html`<div class="imp"><div class="row" style="padding:0">${o?portraitRing(o,44,{pct:false}):''}<span class="r-t"><b>${o?.nameAr||'—'}</b><small class="num">${o?'OR'+o.code:''}</small></span>${o?html`<a class="btn btn-line btn-sm" href="#/orphans/${o.id}" data-close-sheet>${icon('orphans','sm')}<span>الملف</span></a>`:''}</div>
         <div class="kv">${kvRow('التاريخ',html`<span class="num">${a.date}</span>`)}${kvRow('الكمية',a.qty?html`<span class="num">${nf2.format(a.qty)}</span> ${a.unit||''}`:'')}${kvRow('القيمة',a.value!=null?html`<span class="num">${money(a.value,a.currency)}</span>`:'')}${kvRow('المعادل',c?.rated&&a.currency!==Finance.base?html`<span class="num">${money(c.value,Finance.base)}</span>`:c&&!c.rated?'بلا سعر صرف':'')}${kvRow('الجهة المانحة',dn.get(a.donorId)||'')}${kvRow('المصدر',a.source)}${a.note?kvRow('ملاحظة',a.note,{wide:true}):''}</div>
