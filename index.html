@@ -2979,33 +2979,32 @@ function openPwChange(){
 Object.assign(VIEWS,{
   accounts(){
     const TABS=[['users','المستخدمون','accounts'],['audit','سجل التدقيق','history']];
-    const tab=signal('users'),kind=signal('all');let cursor=null,tk=0;
+    const tab=signal('users'),kind=signal('all');let cursor=null,tk=0,ml=null,sGrp='team',sQ='';const onDispose=disposer();
     const el=viewShell(html`<div class="mod-head rise" style="--i:0"><span class="medal">${icon('accounts')}</span><div><h2>الحسابات</h2><p>أعضاء الفريق وأدوارهم، وسجل لكل تغيير بمن قام به ومتى.</p></div><svg class="veins" viewBox="0 0 400 400" aria-hidden="true"><use href="#veins"/></svg></div>
       <div class="rise" style="--i:1">${tabsH(TABS,'users')}</div><section class="sec rise" style="--i:2" data-bind="panel"></section>`);
     const panel=$('[data-bind=panel]',el);
-    async function users(){
-      const t=++tk;panel.replaceChildren(toFrag(skelList(3)));
-      let list;try{list=await repo.listUsers()}catch(e){panel.replaceChildren(toFrag(html`<p class="g-err">${e.message}</p>`));return}
-      if(t!==tk)return;
-      const team=list.filter(u=>u.role!=='orphan'),kids=list.filter(u=>u.role==='orphan');
-      let st={accounts:kids.length,pending:kids.filter(u=>u.mustChange).length,missing:[]};try{st=await repo.orphanAccountStats()}catch{}
-      if(t!==tk)return;
-      const g=group.peek(),term=normalizeAr(uq.peek());
-      const shown=(g==='team'?team:kids).filter(u=>!term||normalizeAr(`${u.displayName} ${u.username} ${u.orphanCode||''}`).includes(term));
-      const thumbs=g==='kids'?new Map((await repo.list('orphans',{pii:'none'}).catch(()=>[])).map(o=>[o.id,o.thumb])):new Map();if(t!==tk)return;
-      const userRow=u=>html`<button type="button" class="row" data-user="${u.id}">${avatarH(u.displayName,u.role,thumbs.get(u.orphanId),'sm')}<span class="r-t"><b>${u.displayName}</b><small><span class="num">${u.role==='orphan'?u.username:'@'+u.username}</span> · ${ROLE_LABEL[u.role]||u.role}${u.orphanCode?html` · <span class="num">OR${u.orphanCode}</span>`:''}</small></span><span class="r-end">${u.active?'':html`<span class="chip bad">موقوف</span>`}${u.mustChange?html`<span class="chip warn">مؤقتة</span>`:''}<small class="muted">${u.lastLogin?relTime(u.lastLogin):'لم يدخل بعد'}</small></span></button>`;
-      panel.replaceChildren(toFrag(html`<div class="chips-row"><button type="button" class="chip-btn" data-grp="team" aria-pressed="${String(g==='team')}">الفريق <span class="num">${team.length}</span></button><button type="button" class="chip-btn" data-grp="kids" aria-pressed="${String(g==='kids')}">حسابات الأيتام <span class="num">${kids.length}</span></button></div>
-      ${g==='team'?html`<header class="sec-h"><h3>فريق العمل</h3><button type="button" class="btn btn-primary btn-sm" data-add-user>${icon('plus','sm')}<span>مستخدم جديد</span></button></header>`
-      :html`<div class="card stat-card"><span class="medal-sm">${icon('key','lg')}</span><div><b><span class="num">${st.accounts}</span> حساب</b><small><span class="num">${st.pending}</span> بانتظار تغيير كلمة المرور · <span class="num">${st.missing.length}</span> يتيم بلا حساب · النطاق @${ORPHAN_DOMAIN}</small></div>
-        <div class="btn-row">${st.missing.length?html`<button type="button" class="btn btn-primary btn-sm" data-mk-missing>${icon('plus','sm')}<span>إنشاء ${st.missing.length} حساب</span></button>`:''}${st.pending?html`<button type="button" class="btn btn-line btn-sm" data-dl-creds>${icon('download','sm')}<span>بيانات الدخول المؤقتة</span></button>`:''}</div></div>
-        <label class="search">${icon('search')}<input type="search" data-uq value="${uq.peek()}" placeholder="بحث بالاسم أو الرمز" autocomplete="off" aria-label="بحث"></label>`}
-      ${shown.length?html`<div class="list">${shown.slice(0,150).map(userRow)}</div>${shown.length>150?html`<p class="muted">تُعرض أول 150 نتيجة؛ استخدم البحث.</p>`:''}`:html`<div class="empty compact"><h4>لا حسابات</h4></div>`}`));
-      if(g==='kids'&&term){const i=$('[data-uq]',panel);i.focus();i.setSelectionRange(i.value.length,i.value.length)}
+    function mountUsers(){
+      ml=entityList({
+        embed:true,skel:3,revs:['users'],init:{grp:sGrp,q:sQ},onState:x=>{sGrp=x.grp;sQ=x.q},
+        search:{placeholder:'بحث بالاسم أو الرمز',when:st=>st.grp==='kids'},
+        filters:[{key:'grp',options:[['team','الفريق'],['kids','حسابات الأيتام']],count:(_,c,k)=>c[k],test:(u,g)=>(g==='team')===(u.role!=='orphan')}],
+        load:async()=>{
+          const list=await repo.listUsers(),kids=list.filter(u=>u.role==='orphan');
+          let st={accounts:kids.length,pending:kids.filter(u=>u.mustChange).length,missing:[]};try{st=await repo.orphanAccountStats()}catch{}
+          const thumbs=new Map((await repo.list('orphans',{pii:'none'}).catch(()=>[])).map(o=>[o.id,o.thumb]));
+          return{rows:list,ctx:{st,thumbs,team:list.length-kids.length,kids:kids.length}};
+        },
+        sorts:[['x','',()=>0]],
+        haystack:u=>`${u.displayName} ${u.username} ${u.orphanCode||''}`,
+        top:(c,{st})=>st.grp==='team'?html`<header class="sec-h"><h3>فريق العمل</h3><button type="button" class="btn btn-primary btn-sm" data-add-user>${icon('plus','sm')}<span>مستخدم جديد</span></button></header>`
+          :html`<div class="card stat-card"><span class="medal-sm">${icon('key','lg')}</span><div><b><span class="num">${c.st.accounts}</span> حساب</b><small><span class="num">${c.st.pending}</span> بانتظار تغيير كلمة المرور · <span class="num">${c.st.missing.length}</span> يتيم بلا حساب · النطاق @${ORPHAN_DOMAIN}</small></div>
+            <div class="btn-row">${c.st.missing.length?html`<button type="button" class="btn btn-primary btn-sm" data-mk-missing>${icon('plus','sm')}<span>إنشاء ${c.st.missing.length} حساب</span></button>`:''}${c.st.pending?html`<button type="button" class="btn btn-line btn-sm" data-dl-creds>${icon('download','sm')}<span>بيانات الدخول المؤقتة</span></button>`:''}</div></div>`,
+        row:(u,c)=>html`<button type="button" class="row" data-user="${u.id}">${avatarH(u.displayName,u.role,c.thumbs.get(u.orphanId),'sm')}<span class="r-t"><b>${u.displayName}</b><small><span class="num">${u.role==='orphan'?u.username:'@'+u.username}</span> · ${ROLE_LABEL[u.role]||u.role}${u.orphanCode?html` · <span class="num">OR${u.orphanCode}</span>`:''}</small></span><span class="r-end">${u.active?'':html`<span class="chip bad">موقوف</span>`}${u.mustChange?html`<span class="chip warn">مؤقتة</span>`:''}<small class="muted">${u.lastLogin?relTime(u.lastLogin):'لم يدخل بعد'}</small></span></button>`,
+        empty:{all:html`<div class="empty compact"><h4>لا حسابات</h4></div>`,none:html`<div class="empty compact"><h4>لا حسابات</h4></div>`}
+      });
+      panel.replaceChildren(ml);
     }
-    const group=signal('team'),uq=signal('');let uqt=0;
-    panel.addEventListener('input',e=>{if(e.target.matches('[data-uq]')){clearTimeout(uqt);uqt=setTimeout(()=>{uq.set(e.target.value);users()},200)}});
     panel.addEventListener('click',async e=>{
-      const g=e.target.closest('[data-grp]');if(g){group.set(g.dataset.grp);users();return}
       const mk=e.target.closest('[data-mk-missing]');
       if(mk){mk.disabled=true;try{const{missing}=await repo.orphanAccountStats();const creds=[];let n=0;const q=[...missing];const run=async()=>{while(q.length){const o=q.shift();try{const a=await repo.ensureOrphanAccount(o);if(a.created)creds.push({code:o.code,name:o.nameAr,username:a.user.username,password:a.password})}catch{}mk.querySelector('span:last-child').textContent=`${++n} / ${missing.length}`}};await Promise.all([run(),run(),run()]);toast(`أُنشئ ${creds.length} حساب`,'ok');if(creds.length)download(`ghiras-credentials-${localDate()}.xlsx`,credsXlsx(creds),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}catch(err){toast(err.message,'error')}finally{mk.disabled=false}return}
       if(e.target.closest('[data-dl-creds]')){try{const rows=await repo.tempCredentials();download(`ghiras-credentials-${localDate()}.xlsx`,credsXlsx(rows),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')}catch(err){toast(err.message,'error')}}
@@ -3031,7 +3030,8 @@ Object.assign(VIEWS,{
       if(e.target.closest('[data-more]'))audit(true);
     });
     effect(()=>syncTabs(el,TABS,tab()));
-    effect(()=>{const t=tab();repo.rev('users')();if(t==='users')users()});
+    onDispose(()=>ml?.destroy());
+    effect(()=>{const t=tab();if(t!=='users'){ml?.destroy();ml=null;return}if(!ml)mountUsers()});
     effect(()=>{const t=tab();kind();repo.rev('audit')();if(t==='audit')audit(false)});
     return el;
   },
@@ -4795,7 +4795,7 @@ function openCurrencyAdd(){
 VIEWS.sponsorships=function(){
   const canW=repo.can('finance.write');
   const TABS=[['month','الشهر','calendar'],...(canW?[['batch','إدخال دفعي','sheet']]:[]),['fx','العملات','swap']];
-  const month=signal(monthKey()),tab=signal('month');let sFilt=(k=>['all','active','received','pending','review','notArrived','none'].includes(k)?k:'all')(NavFilter.take('sponsorships'));let tk=0,sTerm='',ml=null,curMonth=null;const sortCol=new Intl.Collator('ar',{numeric:true});
+  const month=signal(monthKey()),tab=signal('month');let sFilt=(k=>['all','active','received','pending','review','notArrived','none'].includes(k)?k:'all')(NavFilter.take('sponsorships'));let tk=0,sTerm='',ml=null,bl=null,curMonth=null;const sortCol=new Intl.Collator('ar',{numeric:true});
   const onDispose=disposer();
   const el=viewShell(html`<div class="mod-head rise" style="--i:0"><span class="medal">${icon('sponsor')}</span><div><h2>الكفالات</h2><p>سجل شهري لكل يتيم لا يُستبدل، بعملات متعددة وأسعار صرف مؤرّخة.</p></div><svg class="veins" viewBox="0 0 400 400" aria-hidden="true"><use href="#veins"/></svg></div>
     <div class="rise" style="--i:1" data-bind="msw"></div><div class="rise" style="--i:1">${tabsH(TABS,'month')}</div><section class="sec rise" style="--i:2" data-bind="panel"></section>`);
@@ -4835,48 +4835,66 @@ VIEWS.sponsorships=function(){
     const data=c.rows.map(({o,s})=>{const x=s?Finance.convert(s):null;return[`OR${o.code}`,o.nameAr||'',c.dn.get(s?.donorId)||'',s?Number(s.amount):'',s?.currency||'',s?SP_STATUS[spStatus(s.status)]?.[0]||'':'بلا سجل',s?.receivedDate||'',optLabel('spMethod',s?.method),s?.txnNo||'',x?.rated?x.value:'',x?.rated?x.fee:'',x?.rated?x.net:'',s?.rev||'']});
     download(`ghiras-sponsorships-${m}.xlsx`,Xlsx.write([{name:m,rows:[hd,...data],widths:[10,30,22,10,8,14,14,14,18,14,12,14,9]}]),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');toast('تم تجهيز ملف Excel','ok');
   }
-  async function paintBatch(){
-    const t=++tk,m=month.peek();panel.oninput=panel.onclick=panel.onchange=null;panel.replaceChildren(toFrag(skelList(6)));
-    let rows;try{rows=await Finance.batchRows(m)}catch(e){return fail(e)}
-    if(t!==tk)return;
-    if(!rows.length)return panel.replaceChildren(toFrag(html`<div class="card empty">${illustration('sponsor')}<h4>لا روابط كفالة لهذا الشهر</h4><p>اربط الأيتام بمتبرعيهم من ملف اليتيم أو المتبرع، أو أدخل مبلغ الكفالة بالدولار في ملف اليتيم، لتُعبّأ هذه الورقة تلقائياً.</p></div>`));
-    const sel=new Set(rows.filter(r=>!r.rec).map(r=>r.o.id)),byId=new Map(rows.map(r=>[r.o.id,r]));
-    const curOpts=Finance.curs.length?Finance.curs:CUR_SEED,today=localDate(),dDate=monthEnd(m)<today?monthEnd(m):today;
-    const bRow=r=>html`<div class="b-row" data-oid="${r.o.id}" data-on="${String(sel.has(r.o.id))}" data-t="${normalizeAr(`${r.o.nameAr} or${r.o.code} ${r.o.code} ${r.donorName}`)}">
-      <div class="b-h"><input type="checkbox" class="pick" data-pk${sel.has(r.o.id)?raw(' checked'):''} aria-label="تحديد ${r.o.nameAr}">${portraitRing(r.o,40,{pct:false})}<span class="r-t"><b>${r.o.nameAr}</b><small><span class="num">OR${r.o.code}</span> · ${r.donorName||'بلا متبرع'} · ${r.src==='link'?'رابط كفالة':r.src==='implicit'?'من ملف اليتيم':'سجل سابق'}</small></span>${r.rec?html`<span class="chip ${SP_STATUS[spStatus(r.rec.status)]?.[1]||''}">${SP_STATUS[r.rec.status]?.[0]||''} · <span class="num">${r.rec.rev}</span></span>`:''}</div>
-      <div class="b-g">
-        <label class="mini"><span>المبلغ</span><input name="amount" inputmode="decimal" dir="ltr" value="${r.amount??''}" maxlength="12" autocomplete="off"></label>
-        <label class="mini"><span>العملة</span><select name="currency">${curOpts.map(c=>html`<option value="${c.code}"${c.code===r.currency?raw(' selected'):''}>${c.code}</option>`)}</select></label>
-        <label class="mini"><span>الحالة</span><select name="status">${SP_KEYS.map(k=>html`<option value="${k}"${k===r.status?raw(' selected'):''}>${SP_STATUS[k][0]}</option>`)}</select></label>
-        <label class="mini"><span>الطريقة</span><select name="method"><option value="">—</option>${OPTS.spMethod.map(([k,lb])=>html`<option value="${k}"${k===r.method?raw(' selected'):''}>${lb}</option>`)}</select></label>
-        <label class="mini"><span>رقم العملية</span><input name="txnNo" dir="ltr" value="${r.txnNo||''}" maxlength="60" autocomplete="off"></label>
-        <label class="mini"><span>تاريخ الاستلام</span><input type="date" name="receivedDate" value="${r.receivedDate||''}" max="${today}"></label>
-      </div></div>`;
-    panel.replaceChildren(toFrag(html`<div class="bulk">
-        <label class="search">${icon('search')}<input type="search" data-bq placeholder="تصفية بالاسم أو الرمز" autocomplete="off" aria-label="تصفية"></label>
+  function mountBatch(){
+    const m=month.peek(),today=localDate(),dDate=monthEnd(m)<today?monthEnd(m):today,sel=new Set(),model=new Map();let byId=new Map();
+    const sync=()=>{
+      const bs=$('[data-bsel]',bl);if(!bs)return;bs.textContent=`${nf.format(sel.size)} محدد`;
+      const a=$('[data-all]',bl),f=bl.ids();a.checked=f.length>0&&f.every(i=>sel.has(i));a.indeterminate=!a.checked&&f.some(i=>sel.has(i));
+    };
+    const mark=(id,on)=>{on?sel.add(id):sel.delete(id);const r_=$(`.b-row[data-oid="${CSS.escape(id)}"]`,bl);if(r_){r_.dataset.on=String(on);$('[data-pk]',r_).checked=on}};
+    bl=entityList({
+      embed:true,skel:6,revs:['orphanDonor'],topOnce:true,after:sync,
+      search:{placeholder:'تصفية بالاسم أو الرمز'},
+      load:async()=>{
+        const rows=await Finance.batchRows(m);byId=new Map(rows.map(r=>[r.o.id,r]));
+        for(const r of rows)if(!model.has(r.o.id)){model.set(r.o.id,{amount:r.amount??'',currency:r.currency,status:r.status,method:r.method||'',txnNo:r.txnNo||'',receivedDate:r.receivedDate||''});if(!r.rec)sel.add(r.o.id)}
+        return{rows:rows.map(r=>({...r,id:r.o.id})),ctx:{curs:Finance.curs.length?Finance.curs:CUR_SEED,rows}};
+      },
+      sorts:[['x','',()=>0]],
+      haystack:r=>`${r.o.nameAr} or${r.o.code} ${r.o.code} ${r.donorName}`,
+      top:c=>!c.rows.length?'':html`<div class="bulk">
         <div class="b-g"><label class="mini"><span>حالة للمحدد</span><select data-bst>${SP_KEYS.map(k=>html`<option value="${k}">${SP_STATUS[k][0]}</option>`)}</select></label><label class="mini"><span>تاريخ الاستلام للمحدد</span><input type="date" data-bdate value="${dDate}" max="${today}"></label></div>
-        <div class="tool-row"><label class="row" style="padding:0;min-height:44px;gap:10px;flex:1;cursor:pointer"><input type="checkbox" class="pick" data-all><span class="r-t"><b data-bsel></b><small><span class="num">${rows.length}</span> مرتبط · <span class="num">${rows.filter(r=>r.rec).length}</span> مسجّل مسبقاً</small></span></label>
-        <button type="button" class="btn btn-line btn-sm" data-bapply>${icon('check','sm')}<span>تطبيق</span></button><button type="button" class="btn btn-primary btn-sm" data-bsave>${icon('sheet','sm')}<span>حفظ</span></button></div></div>
-      <div class="list" data-brows>${rows.map(bRow)}</div>`));
-    const lst=$('[data-brows]',panel);
-    const sync=()=>{$('[data-bsel]',panel).textContent=`${nf.format(sel.size)} محدد`;const a=$('[data-all]',panel);a.checked=sel.size===rows.length;a.indeterminate=sel.size>0&&sel.size<rows.length};
-    const mark_=(rowEl,on)=>{const id=rowEl.dataset.oid;on?sel.add(id):sel.delete(id);rowEl.dataset.on=String(on);$('[data-pk]',rowEl).checked=on};
-    sync();
-    panel.oninput=e=>{if(e.target.matches('[data-bq]')){const n=normalizeAr(e.target.value);$$('.b-row',lst).forEach(r_=>{r_.hidden=!!n&&!r_.dataset.t.includes(n)});return}const r_=e.target.closest('.b-row');if(r_&&!e.target.matches('[data-pk]'))mark_(r_,true),sync()};
-    panel.onchange=e=>{const t_=e.target;if(t_.matches('[data-all]')){$$('.b-row',lst).filter(r_=>!r_.hidden).forEach(r_=>mark_(r_,t_.checked));sync();return}if(t_.matches('[data-pk]')){mark_(t_.closest('.b-row'),t_.checked);sync();return}const r_=t_.closest('.b-row');if(r_){mark_(r_,true);sync()}};
-    panel.onclick=async e=>{
-      if(e.target.closest('[data-bapply]')){const s=$('[data-bst]',panel).value,d=$('[data-bdate]',panel).value;for(const id of sel){const r_=$(`.b-row[data-oid="${CSS.escape(id)}"]`,lst);if(!r_)continue;r_.querySelector('[name=status]').value=s;const di=r_.querySelector('[name=receivedDate]');if(s==='received'&&!di.value)di.value=d}toast(`طُبّق على ${sel.size}`,'info',1600);return}
+        <div class="tool-row"><label class="row" style="padding:0;min-height:44px;gap:10px;flex:1;cursor:pointer"><input type="checkbox" class="pick" data-all><span class="r-t"><b data-bsel></b><small><span class="num">${c.rows.length}</span> مرتبط · <span class="num">${c.rows.filter(r=>r.rec).length}</span> مسجّل مسبقاً</small></span></label>
+        <button type="button" class="btn btn-line btn-sm" data-bapply>${icon('check','sm')}<span>تطبيق</span></button><button type="button" class="btn btn-primary btn-sm" data-bsave>${icon('sheet','sm')}<span>حفظ</span></button></div></div>`,
+      row:(r,c)=>{const v=model.get(r.o.id);return html`<div class="b-row" data-oid="${r.o.id}" data-on="${String(sel.has(r.o.id))}">
+        <div class="b-h"><input type="checkbox" class="pick" data-pk${sel.has(r.o.id)?raw(' checked'):''} aria-label="تحديد ${r.o.nameAr}">${portraitRing(r.o,40,{pct:false})}<span class="r-t"><b>${r.o.nameAr}</b><small><span class="num">OR${r.o.code}</span> · ${r.donorName||'بلا متبرع'} · ${r.src==='link'?'رابط كفالة':r.src==='implicit'?'من ملف اليتيم':'سجل سابق'}</small></span>${r.rec?html`<span class="chip ${SP_STATUS[spStatus(r.rec.status)]?.[1]||''}">${SP_STATUS[r.rec.status]?.[0]||''} · <span class="num">${r.rec.rev}</span></span>`:''}</div>
+        <div class="b-g">
+          <label class="mini"><span>المبلغ</span><input name="amount" inputmode="decimal" dir="ltr" value="${v.amount}" maxlength="12" autocomplete="off"></label>
+          <label class="mini"><span>العملة</span><select name="currency">${c.curs.map(x=>html`<option value="${x.code}"${x.code===v.currency?raw(' selected'):''}>${x.code}</option>`)}</select></label>
+          <label class="mini"><span>الحالة</span><select name="status">${SP_KEYS.map(k=>html`<option value="${k}"${k===v.status?raw(' selected'):''}>${SP_STATUS[k][0]}</option>`)}</select></label>
+          <label class="mini"><span>الطريقة</span><select name="method"><option value="">—</option>${OPTS.spMethod.map(([k,lb])=>html`<option value="${k}"${k===v.method?raw(' selected'):''}>${lb}</option>`)}</select></label>
+          <label class="mini"><span>رقم العملية</span><input name="txnNo" dir="ltr" value="${v.txnNo}" maxlength="60" autocomplete="off"></label>
+          <label class="mini"><span>تاريخ الاستلام</span><input type="date" name="receivedDate" value="${v.receivedDate}" max="${today}"></label>
+        </div></div>`},
+      empty:{all:html`<div class="card empty">${illustration('sponsor')}<h4>لا روابط كفالة لهذا الشهر</h4><p>اربط الأيتام بمتبرعيهم من ملف اليتيم أو المتبرع، أو أدخل مبلغ الكفالة بالدولار في ملف اليتيم، لتُعبّأ هذه الورقة تلقائياً.</p></div>`,none:html`<div class="empty compact"><h4>لا نتائج</h4></div>`}
+    });
+    const edit=t_=>{const r_=t_.closest('.b-row');if(!r_||!t_.name||t_.matches('[data-pk]'))return;model.get(r_.dataset.oid)[t_.name]=t_.value;mark(r_.dataset.oid,true);sync()};
+    bl.addEventListener('input',e=>edit(e.target));
+    bl.addEventListener('change',e=>{
+      const t_=e.target;
+      if(t_.matches('[data-all]')){for(const id of bl.ids())mark(id,t_.checked);sync();return}
+      if(t_.matches('[data-pk]')){mark(t_.closest('.b-row').dataset.oid,t_.checked);sync();return}
+      edit(t_);
+    });
+    bl.addEventListener('click',async e=>{
+      if(e.target.closest('[data-bapply]')){
+        const st_=$('[data-bst]',bl).value,d=$('[data-bdate]',bl).value;
+        for(const id of sel){const v=model.get(id);v.status=st_;if(st_==='received'&&!v.receivedDate)v.receivedDate=d}
+        $$('.b-row',bl).forEach(r_=>{const v=model.get(r_.dataset.oid);for(const k of ['status','receivedDate'])r_.querySelector(`[name=${k}]`).value=v[k]});
+        toast(`طُبّق على ${sel.size}`,'info',1600);return;
+      }
       const sv=e.target.closest('[data-bsave]');if(!sv)return;
       if(!sel.size)return toast('حدّد صفاً واحداً على الأقل','warn');
-      const d=$('[data-bdate]',panel).value;
-      const items=[...sel].map(id=>{const r_=$(`.b-row[data-oid="${CSS.escape(id)}"]`,lst),src=byId.get(id),g=n=>r_.querySelector(`[name=${n}]`).value;const status=g('status');return{orphanId:id,code:src.o.code,rec:src.rec,donorId:src.donorId,amount:g('amount'),currency:g('currency'),status,method:g('method'),txnNo:g('txnNo'),receivedDate:g('receivedDate')||(status==='received'?d:''),fee:src.fee??Finance.fee}});
+      const d=$('[data-bdate]',bl).value;
+      const items=[...sel].map(id=>{const src=byId.get(id),v=model.get(id);return{orphanId:id,code:src.o.code,rec:src.rec,donorId:src.donorId,amount:v.amount,currency:v.currency,status:v.status,method:v.method,txnNo:v.txnNo,receivedDate:v.receivedDate||(v.status==='received'?d:''),fee:src.fee??Finance.fee}});
       if(!(await Dlg.confirm({title:`حفظ ${items.length} سجل؟`,text:`يُضاف لكل يتيم سجل ${monthName(m)} أو مراجعة جديدة إن تغيّر؛ الصفوف غير المتغيرة تُتجاوز.`,ok:'حفظ'})))return;
       sv.classList.add('busy');sv.disabled=true;const lb=sv.querySelector('span');
       try{const res=await Finance.saveBatch(items,m,(n,tot)=>{lb.textContent=`${n}/${tot}`});toast(`حُفظ ${res.done} · تُجوّز ${res.skipped}${res.errs.length?` · أخطاء ${res.errs.length}`:''}`,res.errs.length?'warn':'ok',5000);if(res.errs.length)Dlg.open({title:'صفوف لم تُحفظ',body:html`<div class="list">${res.errs.map(x=>html`<div class="row"><span class="r-ic">${icon('alert')}</span><span class="r-t"><b class="num">OR${x.code}</b><small>${x.msg}</small></span></div>`)}</div>`})}
       catch(err){toast(err.message,'error')}
       finally{sv.classList.remove('busy');sv.disabled=false;lb.textContent='حفظ'}
-      paintBatch();
-    };
+      model.clear();sel.clear();bl.reload();
+    });
+    panel.oninput=panel.onclick=panel.onchange=null;panel.replaceChildren(bl);
   }
   async function paintFx(){
     const t=++tk;panel.replaceChildren(toFrag(skelList(3)));panel.oninput=panel.onclick=panel.onchange=null;
@@ -4903,11 +4921,11 @@ VIEWS.sponsorships=function(){
     if(e.target.closest('[data-xls]'))return exportMonth();
     if(e.target.closest('[data-sp-import]'))openSponsorImport();
   });
-  onDispose(()=>ml?.destroy());
+  onDispose(()=>{ml?.destroy();bl?.destroy()});
   effect(()=>syncTabs(el,TABS,tab()));
   effect(()=>{const m=month(),t=tab();msw.hidden=t==='fx';msw.replaceChildren(toFrag(monthSwH(m)))});
   effect(()=>{const t=tab();month();if(t!=='month'){ml?.destroy();ml=null;return}if(ml)ml.reload();else mountMonth()});
-  effect(()=>{const t=tab();month();repo.rev('orphanDonor')();if(t==='batch')paintBatch()});
+  effect(()=>{const t=tab();month();bl?.destroy();bl=null;if(t==='batch')mountBatch()});
   effect(()=>{const t=tab();repo.rev('fxRates')();repo.rev('currencies')();repo.rev('settings')();if(t==='fx')paintFx()});
   return el;
 };
@@ -6916,22 +6934,23 @@ function entityList(cfg){
     topNodes=[...toFrag(cfg.top(ctx,{all,ids,st})||'').childNodes];(cfg.topFirst&&$('.toolbar',el)||list).before(...topNodes);
   }
   async function apply(){
-    if(dead)return;const t=++tk,term=st.q.trim();let res=[...byId.keys()];cfg.onState?.(st);
+    if(dead)return;const t=++tk,term=cfg.search?.when&&!cfg.search.when(st)?'':st.q.trim();let res=[...byId.keys()];cfg.onState?.(st);
     if(term)res=cfg.match?await cfg.match(term,{rows:all,byId,ctx}):(n=>res.filter(i=>normalizeAr(cfg.haystack(byId.get(i),ctx)).includes(n)))(normalizeAr(term));
     if(t!==tk)return;
     res=res.filter(i=>{const o=byId.get(i);return o&&flt.every(f=>f.test(o,st[f.key],ctx))});
     const s=srt.find(x=>x[0]===st.sort);
     if(s&&!(term&&cfg.keepSearchOrder))res.sort((a,b)=>s[2](byId.get(a),byId.get(b),ctx));
-    ids=res;paintTop();emptyEl?.remove();emptyEl=null;list.replaceChildren();list.hidden=false;
+    ids=res;if(!cfg.topOnce||!topNodes.length)paintTop();const sl=$('.search',el);if(sl&&cfg.search?.when)sl.hidden=!cfg.search.when(st);emptyEl?.remove();emptyEl=null;list.replaceChildren();list.hidden=false;
     if(cfg.virtual){w0=w1=-1;list.classList.toggle('virt',ids.length>0);list.style.height=ids.length?ids.length*RH+'px':''}
     if(!ids.length){const src=all.length?cfg.empty.none:cfg.empty.all,e=toFrag(typeof src==='function'?src(ctx):src);if(cfg.emptyIn==='sibling'){list.hidden=true;emptyEl=e.firstElementChild;list.after(emptyEl)}else list.append(e)}
     else if(cfg.virtual)paintWin(true);else{shown=0;more()}
     if(cnt&&cfg.count)cnt.textContent=cfg.count({all,shown:ids.length,term,st,ctx});
+    cfg.after?.(el,ctx);
   }
   async function load(){
     let r;
     try{r=await cfg.load()}catch(e){list.hidden=false;list.replaceChildren(toFrag(html`<p class="g-err">${e.message}</p>`));return}
-    const t=++tk;if(dead)return;all=r.rows;ctx=r.ctx??null;byId=new Map(all.map(x=>[x.id,x]));
+    const t=++tk;if(dead)return;if(cfg.topOnce){topNodes.forEach(n=>n.remove());topNodes=[]}all=r.rows;ctx=r.ctx??null;byId=new Map(all.map(x=>[x.id,x]));
     await cfg.index?.(all,ctx);
     if(t!==tk)return;
     for(const f of flt)if(f.count)for(const b of $$(`[data-fk="${f.key}"]`,el)){const n=$('[data-cn]',b);if(n)n.textContent=nf.format(f.count(all,ctx,b.dataset.fv))}
@@ -6946,7 +6965,7 @@ function entityList(cfg){
   if(cfg.virtual){addEventListener('scroll',onScroll,{passive:true});addEventListener('resize',onScroll,{passive:true});onDispose(()=>{removeEventListener('scroll',onScroll);removeEventListener('resize',onScroll);cancelAnimationFrame(raf)})}
   else{if('IntersectionObserver' in window){io=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting))more()},{rootMargin:'600px'});io.observe($('[data-sentinel]',el))}onDispose(()=>io?.disconnect())}
   const stop=effect(()=>{(cfg.revs||[]).forEach(s=>repo.rev(s)());load()});
-  el.reload=load;
+  el.reload=load;el.ids=()=>ids;
   el.destroy=()=>{dead=true;stop();io?.disconnect();removeEventListener('scroll',onScroll);removeEventListener('resize',onScroll);cancelAnimationFrame(raf)};
   return el;
 }
