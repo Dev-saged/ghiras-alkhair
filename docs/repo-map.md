@@ -30,7 +30,7 @@ JS(~1124-7350): ثوابت1126·أدوات1152·إشارات1188·حالة1209·
 - استيراد Excel دفعي بالكود (قسم ٤٦): قالب، معاينة، استمرار على الصحيح، تقرير أخطاء؛ الحفظ عبر `Finance.addAid`/`Finance.record`.
 
 ## Solved bugs (never reintroduce)
-- v1.3.1 صور: `compressImage` يقرأ الملف فوراً ويكشف الصيغة من البايتات (`sniffImage`) ولا يثق بـfile.type؛ HEIC يُحوَّل في iframe معزول `heic-frame.html`+`heic2any.min.js` (يحتاج eval، فلا تُخفَّف CSP الصفحة). SW: طلبات iframe لا تُخزَّن كصفحة التطبيق.
+- v1.3.1 صور: `compressImage` يقرأ الملف فوراً ويكشف الصيغة من البايتات (`sniffImage`) ولا يثق بـfile.type؛ HEIC في iframe معزول `heic-frame.html`+`heic2any.min.js` (eval؛ لا تُخفَّف CSP؛ يُضمّان عند التغليف). SW: طلبات iframe لا تُخزَّن كصفحة التطبيق.
 - v1.3.1 تدقيق: كان `audit` محلياً بلا مزامنة. الآن `Cloud.pushAudit`/`cloudApplyAudit` (مجموعة `audit`؛ تحتاج قاعدة: docs/firestore-audit-rules.md). صفوف sync/seed/backup محلية (تجنّب حلقة).
 
 ## Open issues

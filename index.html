@@ -1124,7 +1124,7 @@ details.adv[open] summary{margin-block-end:8px}
 <script>
 'use strict';
 /* ══════════ ١ الثوابت ══════════ */
-const APP_VERSION='1.3.1';
+const APP_VERSION='1.3.2';
 // إعداد السحابة الثابت: يتصل كل جهاز تلقائياً
 const CLOUD_PRESET=Object.freeze({project:'ghiras-alkhair',apiKey:'AIzaSyCmVmQHkelH4t6-STrbBr9CXOb14xuEg8c',worker:'https://ghiras-worker.dev-mr07.workers.dev',org:'ghras'});
 const LITE=document.documentElement.dataset.lite==='1';
@@ -3569,11 +3569,15 @@ async function decodeImage(src){
 function heicToJpeg(buf){
   return new Promise((ok,no)=>{
     const f=document.createElement('iframe');f.sandbox='allow-scripts';f.hidden=true;f.setAttribute('aria-hidden','true');f.src='heic-frame.html';
-    const id=uid(),done=(fn,v)=>{clearTimeout(tm);removeEventListener('message',on);f.remove();fn(v)},tm=setTimeout(()=>done(no,new Error('timeout')),90000);
-    const on=e=>{if(e.source!==f.contentWindow||e.data?.id!==id)return;e.data.buf instanceof ArrayBuffer?done(ok,new Blob([e.data.buf],{type:'image/jpeg'})):done(no,new Error(String(e.data.err||'heic')))};
-    addEventListener('message',on);
-    f.onload=()=>f.contentWindow.postMessage({id,buf},'*',[buf]);f.onerror=()=>done(no,new Error('frame'));
-    document.body.append(f);
+    const id=uid();let tm=setTimeout(()=>done(no,new Error('missing')),8000);
+    const done=(fn,v)=>{clearTimeout(tm);removeEventListener('message',on);f.remove();fn(v)};
+    const on=e=>{
+      if(e.source!==f.contentWindow)return;
+      if(e.data?.ready){clearTimeout(tm);tm=setTimeout(()=>done(no,new Error('timeout')),90000);f.contentWindow.postMessage({id,buf},'*',[buf]);return}
+      if(e.data?.id!==id)return;
+      e.data.buf instanceof ArrayBuffer?done(ok,new Blob([e.data.buf],{type:'image/jpeg'})):done(no,new Error(String(e.data.err||'heic')));
+    };
+    addEventListener('message',on);document.body.append(f);
   });
 }
 async function canvasCompress(src,max,mb){
@@ -3598,7 +3602,7 @@ async function compressImage(file,kind,onStatus){
   let src;
   if(fmt==='heic'){
     onStatus?.('تحويل صورة HEIC…');
-    try{src=await heicToJpeg(buf.slice(0))}catch{throw new DataError('تعذّر تحويل صورة HEIC؛ غيّر صيغة الكاميرا إلى JPG (الأكثر توافقاً) أو أرسلها لنفسك ثم اختر النسخة المحوّلة')}
+    try{src=await heicToJpeg(buf.slice(0))}catch{throw new DataError('تعذّر تحويل صورة HEIC؛ غيّر صيغة الكاميرا إلى JPG (الأكثر توافقاً) أو حوّلها ثم أعد المحاولة؛ وإن كان التطبيق مغلّفاً فتأكد من وجود ملفي heic-frame.html وheic2any.min.js ضمن الحزمة')}
   }else src=new Blob([buf],{type:fmt?'image/'+fmt:(file.type||'image/jpeg')});
   const lib=await Lib.load('imgc').catch(()=>false);
   onStatus?.(lib?'المكتبة موجودة — جاري الضغط':'ضغط مدمج — المكتبة غير متاحة حالياً');

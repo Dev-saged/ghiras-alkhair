@@ -8,4 +8,5 @@ addEventListener('message',async e=>{
   try{const o=await heic2any({blob:new Blob([buf],{type:'image/heic'}),toType:'image/jpeg',quality:.85});const b=await(Array.isArray(o)?o[0]:o).arrayBuffer();parent.postMessage({id,buf:b},'*',[b])}
   catch(err){parent.postMessage({id,err:String(err&&err.message||err)},'*')}
 });
+parent.postMessage({ready:1},'*');
 </script>
