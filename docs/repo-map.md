@@ -4,12 +4,7 @@ Keep under 5KB. No code. Update by 2 lines after every change.
 
 ## Files
 - `index.html` — كل التطبيق (~7350 سطر، CSS+JS مضمّن): PWA كفالة أيتام، RTL، IndexedDB، مزامنة Firestore REST.
-- `sw.js` — service worker (تخزين الصفحة+خطوط Google، يتجاهل raw.githubusercontent.com).
-- `version.json` — `{version,url,notes,date}` لإشعار التحديث.
-- `README.md` — عرض فقط، لا منطق.
-- صور العرض (`banner.svg hero.jpg gallery.jpg stats.svg card-*.svg sec-*.svg`) — لـREADME فقط.
-- `.claude/skills/design-system|firebase-rules` — مراجع تصميم/Firestore.
-- `.claude/session-handoff.md` — حالة آخر جلسة.
+- `sw.js` service worker · `version.json` إشعار التحديث · `README.md`+صور (svg/jpg) للعرض فقط · `.claude/skills/*` مراجع · `.claude/session-handoff.md` حالة آخر جلسة.
 
 ## Sections (SECTION markers)
 فواصل `/* ══ N العنوان ══ */` بالعربية؛ المعتمَد نص العنوان لا الرقم (ترقيم فيه فجوات/تكرار قديم غير مُصلَح؛ أسطر JS تقريبية).
@@ -22,8 +17,8 @@ JS(~1124-7350): ثوابت1126·أدوات1152·إشارات1188·حالة1209·
 - `APP`(=CONFIG) `ROUTES`(=وحدات/nav) `SCHEMA`(IndexedDB v1-v3) `DB_VERSION` `ROLE_CAPS`
 - `repo`(`openIDB`)، صلاحيات `capSet/can/need/isSelf`
 - `entityForm`+`FieldKinds`(قسم ٤٥) — نماذج staff/projects/expenses/donors
-- `entityList`(قسم ٤٧): قائمة من schema (virtual/دفعات، embed داخل تبويب، `destroy()`) + `listOrEmpty` — الأيتام/المصروفات/شهر الكفالات/سجل المساعدات
-- `entityDetail`(قسم ٤٨): صفحة سجل (hero+KPIs+أقسام+حذف عام؛ hooks: load/actions/kpis/sections/on) — `donorView`
+- `entityList`(قسم ٤٧): قائمة من schema (virtual/دفعات، embed داخل تبويب، `destroy()`) + `listOrEmpty` — الأيتام/المصروفات/شهر الكفالات/سجل المساعدات/المتابعات
+- `entityDetail`(قسم ٤٨): صفحة سجل (hero+KPIs+أقسام+حذف عام؛ hooks: load/actions/kpis/sections/on) — `donorView/staffView/projectView`
 - `codeImportDlg`(قسم ٤٦) — محرك استيراد Excel عام بالكود؛ يستخدمه `openAidImport`/`openSponsorImport` (يعيد استخدام `Finance.addAid`/`Finance.record` نفسها، فلا تحقّق مكرر)
 - `#/test` — اختبار ذاتي مخفي للمدير
 - IDs أساسية: `#gate #splash #shell #rail-nav #topbar #page-title #theme-btn #sync-chip #net-chip #me-btn #update-banner #main #outlet #dock #more-sheet #me-sheet #dyn-sheet #scrim #toasts`
@@ -39,4 +34,4 @@ JS(~1124-7350): ثوابت1126·أدوات1152·إشارات1188·حالة1209·
 
 ## Open issues
 - ترقيم أقسام JS فيه فجوات وتكرار (١٣،٤١) — للعلم فقط.
-- تعميم schema (مراحل): ✅١ أيتام+مصروفات ✅٢ نسخ احتياطي+كفالات(شهر) ✅٣ تفصيل المتبرعين+سجل المساعدات. ⏳٤ تفصيل الموظفين/المشاريع+المتابعات ٥ حسابات+كفالات دفعي/FX ٦ تفصيل الأيتام ٧ التقارير
+- تعميم schema (مراحل): ✅١ أيتام+مصروفات ✅٢ نسخ احتياطي+كفالات(شهر) ✅٣ تفصيل المتبرعين+سجل المساعدات ✅٤ تفصيل الموظفين/المشاريع+المتابعات. ⏳٥ حسابات+كفالات دفعي/FX ٦ تفصيل الأيتام ٧ التقارير

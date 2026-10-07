@@ -4127,26 +4127,31 @@ function orphanImportView(){
 /* ══════════ ٢٨ المتابعات وحسابات الأيتام ══════════ */
 VIEWS.followups=function(){
   const TABS=[['late','متأخرة','alert'],['next','قادمة','calendar'],['done','منجزة','check']];
-  const tab=signal((k=>['late','next','done'].includes(k)?k:'next')(NavFilter.take('followups')));let tk=0;
+  const tab=signal((k=>['late','next','done'].includes(k)?k:'next')(NavFilter.take('followups')));let ml=null;const onDispose=disposer();
   const el=viewShell(html`<div class="mod-head rise" style="--i:0"><span class="medal">${icon('followups')}</span><div><h2>المتابعات</h2><p>زيارات واتصالات دورية لأحوال الأيتام وأسرهم.</p></div><svg class="veins" viewBox="0 0 400 400" aria-hidden="true"><use href="#veins"/></svg></div>
     <div class="rise" style="--i:1">${tabsH(TABS,tab.peek())}</div><section class="sec rise" style="--i:2" data-bind="panel"></section>`);
   const panel=$('[data-bind=panel]',el);
-  async function paint(){
-    const t=++tk,cur=tab.peek(),today=localDate();panel.replaceChildren(toFrag(skelList(3)));
-    let rows=[],orphans=[];
-    try{[rows,orphans]=await Promise.all([repo.list('followups',{pii:'none'}),repo.list('orphans',{pii:'none'}).catch(()=>[])])}catch(e){panel.replaceChildren(toFrag(html`<p class="g-err">${e.message}</p>`));return}
-    if(t!==tk)return;
-    const names=new Map(orphans.map(o=>[o.id,o]));
-    rows=rows.filter(f=>cur==='done'?f.status==='done':f.status!=='done'&&(cur==='late'?f.due<today:f.due>=today)).map(f=>{const o=names.get(f.orphanId),ph=normPhone(o?.whatsapp||o?.contactPhone||'');return{...f,orphanName:o?.nameAr||'',orphanGender:o?.gender||'',waPhone:/^\d{9,15}$/.test(ph)?ph:''}});
-    rows.sort((a,b)=>cur==='done'?String(b.doneAt||b.due).localeCompare(String(a.doneAt||a.due)):String(a.due).localeCompare(String(b.due)));
-    panel.replaceChildren(toFrag(rows.length?html`<div class="list">${rows.map(fuItem)}</div>`:html`<div class="card empty compact">${illustration('followups')}<h4>${cur==='late'?'لا متابعات متأخرة':cur==='done'?'لا متابعات منجزة بعد':'لا متابعات قادمة'}</h4><p>تُضاف المتابعات من ملف كل يتيم.</p></div>`));
+  function mountList(cur){
+    ml=entityList({
+      embed:true,skel:3,revs:['followups'],emptyIn:'sibling',
+      load:async()=>{
+        const today=localDate(),[rows,orphans]=await Promise.all([repo.list('followups',{pii:'none'}),repo.list('orphans',{pii:'none'}).catch(()=>[])]);
+        const names=new Map(orphans.map(o=>[o.id,o]));
+        return{rows:rows.filter(f=>cur==='done'?f.status==='done':f.status!=='done'&&(cur==='late'?f.due<today:f.due>=today)).map(f=>{const o=names.get(f.orphanId),ph=normPhone(o?.whatsapp||o?.contactPhone||'');return{...f,orphanName:o?.nameAr||'',orphanGender:o?.gender||'',waPhone:/^\d{9,15}$/.test(ph)?ph:''}})};
+      },
+      sorts:[['due','',(a,b)=>cur==='done'?String(b.doneAt||b.due).localeCompare(String(a.doneAt||a.due)):String(a.due).localeCompare(String(b.due))]],
+      row:fuItem,
+      empty:{all:html`<div class="card empty compact">${illustration('followups')}<h4>${cur==='late'?'لا متابعات متأخرة':cur==='done'?'لا متابعات منجزة بعد':'لا متابعات قادمة'}</h4><p>تُضاف المتابعات من ملف كل يتيم.</p></div>`}
+    });
+    panel.replaceChildren(ml);
   }
   el.addEventListener('click',async e=>{
     const t=e.target.closest('[data-tab]');if(t){tab.set(t.dataset.tab);return}
     const d=e.target.closest('[data-fu-done]');if(d){try{await repo.save('followups',{id:d.dataset.fuDone,status:'done',doneAt:localDate()});toast('أُنجزت المتابعة','ok')}catch(err){toast(err.message,'error')}}
   });
+  onDispose(()=>ml?.destroy());
   effect(()=>syncTabs(el,TABS,tab()));
-  effect(()=>{tab();repo.rev('followups')();paint()});
+  effect(()=>{const t=tab();ml?.destroy();mountList(t)});
   return el;
 };
 
@@ -7087,42 +7092,44 @@ async function openStaffReport(){
     }catch(err){formErr(f,err)}})}});
 }
 function staffView(id){
-  const canW=repo.can('staff.write'),canDel=repo.can('staff.delete');let tk=0,s=null,rows=[],n=12;
-  const el=viewShell(html`<div class="skel" style="height:220px;border-radius:30px"></div>`);el.dataset.title='ملف موظف';
-  async function paint(){
-    const t=++tk;try{[s,rows]=await Promise.all([repo.get('staff',id,{pii:'none'}),repo.list('staffPay',{index:'staffId',query:id,pii:'none'})]);await Finance.ready()}catch(e){el.replaceChildren(toFrag(html`<div class="card empty"><h4>تعذّر فتح الملف</h4><p>${e.message}</p></div>`));return}
-    if(t!==tk)return;
-    if(!s){el.replaceChildren(toFrag(html`<div class="card empty">${illustration('staff')}<h4>الموظف غير موجود</h4><a class="btn btn-ghost" href="#/staff">العودة للقائمة</a></div>`));return}
-    const B=Finance.base,{from,to}=rangeOf(n);
-    rows.sort((a,b)=>String(b.month).localeCompare(a.month)||String(b.paidDate).localeCompare(a.paidDate));
-    const inR=rows.filter(r=>r.month>=from&&r.month<=to),T=sumBy(inR),all=sumBy(rows),types=groupBy(inR,r=>r.type);
-    const wa=s.whatsapp||s.phone;
-    el.replaceChildren(toFrag(html`
-      <section class="o-hero rise" style="--i:0">${avatarH(s.name,'staff',s.thumb,'lg')}<h2>${s.name}</h2>${s.job?html`<p class="muted">${s.job}</p>`:''}
-        <div class="chips"><span class="chip">${optL(MARITAL,s.marital)}</span>${s.family?html`<span class="chip"><span class="num">${s.family}</span> أفراد</span>`:''}<span class="chip ${s.active===0?'':'ok'}">${s.active===0?'موقوف':'على رأس العمل'}</span></div>
-        <div class="btn-row">${canW?html`<button type="button" class="btn btn-primary btn-sm" data-s="pay">${icon('coins','sm')}<span>صرف</span></button><button type="button" class="btn btn-line btn-sm" data-s="edit">${icon('edit','sm')}<span>تعديل</span></button>`:''}${wa?html`<a class="btn btn-line btn-sm" href="${safeUrl('https://wa.me/'+wa)}" target="_blank" rel="noopener noreferrer">${icon('chat','sm')}<span>واتساب</span></a>`:''}${s.phone?html`<a class="btn btn-line btn-sm" href="${safeUrl('tel:+'+s.phone)}">${icon('phone','sm')}<span>اتصال</span></a>`:''}${canDel?html`<button type="button" class="btn btn-ghost btn-icon" data-s="del" aria-label="حذف">${icon('trash','sm')}</button>`:''}</div></section>
-      <div class="fin-kpis rise" style="--i:1"><div class="fk"><small>المكافأة الشهرية</small><b class="num">${money(s.reward||0,'ILS')}</b></div><div class="fk"><small>استلم في الفترة</small><b class="num">${moneyU(T,B)}</b><em><span class="num">${nf.format(inR.length)}</span> دفعة</em></div><div class="fk" data-t="review"><small>كل ما استلمه</small><b class="num">${moneyU(all,B)}</b><em><span class="num">${nf.format(rows.length)}</span> دفعة</em></div></div>
-      <section class="card sec-card rise" style="--i:2"><header><h3>${icon('calendar')}ما استلمه</h3><small>${monthName(from)} — ${monthName(to)}</small></header>${rangeChips(n)}
-        ${types.length?html`<div class="aid-sum">${types.map(([k,g])=>html`<div class="as"><small>${optL(PAY_TYPE,k)}</small><b class="num">${moneyU(sumBy(g),B)}</b></div>`)}</div>`:''}
-        ${inR.length?html`<div class="list">${inR.map(p=>html`<div class="row"><span class="r-ic">${icon(p.type==='reward'?'coins':'aid')}</span><span class="r-t"><b>${monthName(p.month)} · ${optL(PAY_TYPE,p.type)}</b><small><span class="num">${p.paidDate||''}</span>${p.method?html` · ${optLabel('spMethod',p.method)}`:''}${p.note?html` · ${p.note}`:''}</small></span><span class="r-end"><b class="num">${money(p.amount,p.currency)}</b>${repo.can('staff.delete')?html`<button type="button" class="btn btn-ghost btn-icon" data-pdel="${p.id}" aria-label="حذف الدفعة">${icon('x','sm')}</button>`:''}</span></div>`)}</div>`:html`<p class="muted">لا دفعات في هذه الفترة.</p>`}
-        <div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-s="rep">${icon('receipt','sm')}<span>كشف الموظف</span></button></div></section>
-      <section class="card sec-card rise" style="--i:3"><header><h3>${icon('user')}البيانات</h3></header><div class="kv">${kvRow('رقم الجوال',html`<span class="num">${fmtPhone(s.phone)||'—'}</span>`)}${kvRow('واتساب',html`<span class="num">${fmtPhone(s.whatsapp)||'—'}</span>`)}${kvRow('الحالة الاجتماعية',optL(MARITAL,s.marital))}${kvRow('عدد الأفراد',s.family??'—')}${kvRow('المسمى',s.job)}${s.note?kvRow('ملاحظات',s.note,{wide:true}):''}</div></section>`));
-  }
-  el.addEventListener('click',async e=>{
-    const q=x=>e.target.closest(x);let b;
-    try{
-      if((b=q('[data-rg]'))){n=Number(b.dataset.rg)||12;paint();return}
-      if((b=q('[data-pdel]'))){if(!(await Dlg.confirm({title:'حذف الدفعة؟',text:'تنتقل إلى سلة المحذوفات.',ok:'حذف',danger:true})))return;await repo.remove('staffPay',b.dataset.pdel);toast('حُذفت الدفعة','ok');return}
-      const k=q('[data-s]')?.dataset.s;if(!k||!s)return;
-      if(k==='pay')return openPay(s);
-      if(k==='edit')return openStaffEdit(s);
-      if(k==='del'){if(!(await Dlg.confirm({title:'حذف الموظف؟',text:'ينتقل الملف إلى سلة المحذوفات، وتبقى دفعاته في السجل.',ok:'حذف',danger:true})))return;await repo.remove('staff',id);location.hash='#/staff';toast('نُقل إلى السلة','ok');return}
-      if(k==='rep'){const B=Finance.base,{from,to}=rangeOf(n),inR=rows.filter(r=>r.month>=from&&r.month<=to),T=sumBy(inR);
-        reportOut({title:`كشف موظف — ${s.name}`,sub:`${monthName(from)} — ${monthName(to)}`,filters:`${optL(MARITAL,s.marital)} · ${s.family||0} أفراد · المكافأة الشهرية ${money(s.reward||0,'ILS')}`,stats:[['الدفعات',nf.format(inR.length)],['المستلم',moneyU(T,B)],['منذ البداية',moneyU(sumBy(rows),B)]],
-          sections:[{title:'الدفعات',cols:[{l:'الشهر',w:.18},{l:'البند',w:.18},{l:'المبلغ',w:.15,t:'num'},{l:'العملة',w:.09},{l:'تاريخ الصرف',w:.16,ltr:1},{l:'ملاحظة',w:.24}],rows:inR.map(r=>[monthName(r.month),optL(PAY_TYPE,r.type),r.amount,r.currency,r.paidDate||'',r.note||'']),foot:['الإجمالي',null,round2(T.base),B,null,null]}]},`staff-${to}-${s.name.replace(/\s+/g,'-').slice(0,24)}`)}
-    }catch(err){toast(err.message,'error')}
+  const canW=repo.can('staff.write'),canDel=repo.can('staff.delete');let n=12,el;
+  el=entityDetail({
+    id,title:'ملف موظف',icon:'staff',back:'#/staff',notFound:'الموظف غير موجود',revs:['staff','staffPay'],
+    load:async id=>{
+      const[s,rows]=await Promise.all([repo.get('staff',id,{pii:'none'}),repo.list('staffPay',{index:'staffId',query:id,pii:'none'})]);await Finance.ready();
+      if(!s)return{rec:null};
+      const{from,to}=rangeOf(n);
+      rows.sort((a,b)=>String(b.month).localeCompare(a.month)||String(b.paidDate).localeCompare(a.paidDate));
+      const inR=rows.filter(r=>r.month>=from&&r.month<=to);
+      return{rec:s,ctx:{rows,from,to,inR,B:Finance.base,T:sumBy(inR),all:sumBy(rows),types:groupBy(inR,r=>r.type)}};
+    },
+    avatar:s=>avatarH(s.name,'staff',s.thumb,'lg'),
+    name:s=>s.name,
+    sub:s=>s.job?html`<p class="muted">${s.job}</p>`:'',
+    chips:s=>[html`<span class="chip">${optL(MARITAL,s.marital)}</span>`,s.family?html`<span class="chip"><span class="num">${s.family}</span> أفراد</span>`:'',html`<span class="chip ${s.active===0?'':'ok'}">${s.active===0?'موقوف':'على رأس العمل'}</span>`],
+    actions:s=>{const wa=s.whatsapp||s.phone;return[canW&&{k:'pay',icon:'coins',label:'صرف',cls:'btn-primary btn-sm'},canW&&{k:'edit',icon:'edit',label:'تعديل'},
+      wa&&{href:safeUrl('https://wa.me/'+wa),ext:1,icon:'chat',label:'واتساب'},s.phone&&{href:safeUrl('tel:+'+s.phone),icon:'phone',label:'اتصال'},
+      canDel&&{k:'del',icon:'trash',cls:'btn-ghost btn-icon',aria:'حذف'}]},
+    kpis:(s,c)=>[{label:'المكافأة الشهرية',value:money(s.reward||0,'ILS')},
+      {label:'استلم في الفترة',value:moneyU(c.T,c.B),sub:html`<span class="num">${nf.format(c.inR.length)}</span> دفعة`},
+      {t:'review',label:'كل ما استلمه',value:moneyU(c.all,c.B),sub:html`<span class="num">${nf.format(c.rows.length)}</span> دفعة`}],
+    sections:(s,c)=>[
+      {icon:'calendar',title:'ما استلمه',small:`${monthName(c.from)} — ${monthName(c.to)}`,body:html`${rangeChips(n)}
+        ${c.types.length?html`<div class="aid-sum">${c.types.map(([k,g])=>html`<div class="as"><small>${optL(PAY_TYPE,k)}</small><b class="num">${moneyU(sumBy(g),c.B)}</b></div>`)}</div>`:''}
+        ${c.inR.length?html`<div class="list">${c.inR.map(p=>html`<div class="row"><span class="r-ic">${icon(p.type==='reward'?'coins':'aid')}</span><span class="r-t"><b>${monthName(p.month)} · ${optL(PAY_TYPE,p.type)}</b><small><span class="num">${p.paidDate||''}</span>${p.method?html` · ${optLabel('spMethod',p.method)}`:''}${p.note?html` · ${p.note}`:''}</small></span><span class="r-end"><b class="num">${money(p.amount,p.currency)}</b>${canDel?html`<button type="button" class="btn btn-ghost btn-icon" data-pdel="${p.id}" aria-label="حذف الدفعة">${icon('x','sm')}</button>`:''}</span></div>`)}</div>`:html`<p class="muted">لا دفعات في هذه الفترة.</p>`}
+        <div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-da="rep">${icon('receipt','sm')}<span>كشف الموظف</span></button></div>`},
+      {icon:'user',title:'البيانات',body:html`<div class="kv">${kvRow('رقم الجوال',html`<span class="num">${fmtPhone(s.phone)||'—'}</span>`)}${kvRow('واتساب',html`<span class="num">${fmtPhone(s.whatsapp)||'—'}</span>`)}${kvRow('الحالة الاجتماعية',optL(MARITAL,s.marital))}${kvRow('عدد الأفراد',s.family??'—')}${kvRow('المسمى',s.job)}${s.note?kvRow('ملاحظات',s.note,{wide:true}):''}</div>`}],
+    del:{store:'staff',to:'#/staff',title:'حذف الموظف؟',text:'ينتقل الملف إلى سلة المحذوفات، وتبقى دفعاته في السجل.'},
+    on:{
+      pay:s=>openPay(s),edit:s=>openStaffEdit(s),
+      rep:(s,c)=>reportOut({title:`كشف موظف — ${s.name}`,sub:`${monthName(c.from)} — ${monthName(c.to)}`,filters:`${optL(MARITAL,s.marital)} · ${s.family||0} أفراد · المكافأة الشهرية ${money(s.reward||0,'ILS')}`,stats:[['الدفعات',nf.format(c.inR.length)],['المستلم',moneyU(c.T,c.B)],['منذ البداية',moneyU(c.all,c.B)]],
+        sections:[{title:'الدفعات',cols:[{l:'الشهر',w:.18},{l:'البند',w:.18},{l:'المبلغ',w:.15,t:'num'},{l:'العملة',w:.09},{l:'تاريخ الصرف',w:.16,ltr:1},{l:'ملاحظة',w:.24}],rows:c.inR.map(r=>[monthName(r.month),optL(PAY_TYPE,r.type),r.amount,r.currency,r.paidDate||'',r.note||'']),foot:['الإجمالي',null,round2(c.T.base),c.B,null,null]}]},`staff-${c.to}-${s.name.replace(/\s+/g,'-').slice(0,24)}`)},
+    onClick:async e=>{
+      let b;
+      if((b=e.target.closest('[data-rg]'))){n=Number(b.dataset.rg)||12;el.repaint();return}
+      if((b=e.target.closest('[data-pdel]'))){if(!(await Dlg.confirm({title:'حذف الدفعة؟',text:'تنتقل إلى سلة المحذوفات.',ok:'حذف',danger:true})))return;await repo.remove('staffPay',b.dataset.pdel);toast('حُذفت الدفعة','ok')}
+    }
   });
-  effect(()=>{repo.rev('staff')();repo.rev('staffPay')();paint()});
   return el;
 }
 
@@ -7189,34 +7196,31 @@ function openProjectEdit(p=null){
   });
 }
 function projectView(id){
-  const canW=repo.can('projects.write'),canDel=repo.can('projects.delete');let tk=0,p=null;
-  const el=viewShell(html`<div class="skel" style="height:220px;border-radius:30px"></div>`);el.dataset.title='ملف مشروع';
-  async function paint(){
-    const t=++tk;try{p=await repo.get('projects',id,{pii:'none'});await Finance.ready()}catch(e){el.replaceChildren(toFrag(html`<div class="card empty"><h4>تعذّر فتح المشروع</h4><p>${e.message}</p></div>`));return}
-    if(t!==tk)return;
-    if(!p){el.replaceChildren(toFrag(html`<div class="card empty">${illustration('project')}<h4>المشروع غير موجود</h4><a class="btn btn-ghost" href="#/projects">العودة للقائمة</a></div>`));return}
-    const c=p.currency||'USD',diff=round2((Number(p.approved)||0)-(Number(p.exec)||0)),pct=p.approved?Math.round((Number(p.exec)||0)/p.approved*100):0,bn=p.bens;
-    el.replaceChildren(toFrag(html`
-      <section class="o-hero rise" style="--i:0"><span class="medal-sm" style="display:grid;place-items:center;width:72px;height:72px;border-radius:24px;background:color-mix(in oklch,var(--brand) 14%,transparent);color:var(--brand-ink)">${icon('project','lg')}</span><h2>${p.name}</h2><p class="muted">${p.funder||''}</p>
-        <div class="chips"><span class="chip num">${p.date||'—'}</span><span class="chip"><span class="num">${nf.format(p.benCount||0)}</span> مستفيد</span><span class="chip ${pct>100?'bad':pct>=90?'ok':'warn'}">تنفيذ <span class="num">${pct}%</span></span></div>
-        <div class="btn-row">${canW?html`<button type="button" class="btn btn-primary btn-sm" data-p="edit">${icon('edit','sm')}<span>تعديل</span></button>`:''}<button type="button" class="btn btn-line btn-sm" data-p="rep">${icon('receipt','sm')}<span>تقرير المشروع</span></button>${canDel?html`<button type="button" class="btn btn-ghost btn-icon" data-p="del" aria-label="حذف">${icon('trash','sm')}</button>`:''}</div></section>
-      <div class="fin-kpis rise" style="--i:1"><div class="fk" data-t="review"><small>قيمة الاعتماد</small><b class="num">${money(p.approved||0,c)}</b></div><div class="fk"><small>مبلغ التنفيذ</small><b class="num">${money(p.exec||0,c)}</b></div><div class="fk" data-t="${diff<0?'notArrived':'pending'}"><small>${diff<0?'تجاوز الاعتماد':'المتبقي من الاعتماد'}</small><b class="num">${money(Math.abs(diff),c)}</b></div><div class="fk"><small>المستفيدون</small><b class="num">${nf.format(p.benCount||0)}</b></div></div>
-      ${p.note?html`<section class="card sec-card rise" style="--i:2"><header><h3>${icon('doc')}ملاحظات</h3></header><p style="white-space:pre-wrap">${p.note}</p></section>`:''}
-      <section class="card sec-card rise" style="--i:3"><header><h3>${icon('sheet')}كشف المستفيدين</h3>${bn?html`<small>${bn.file} · <span class="num">${nf.format(bn.count)}</span></small>`:''}</header>
-        ${bn?.rows?.length?html`<div class="pv-wrap"><table class="pv"><thead><tr><th>#</th>${bn.head.map(h=>html`<th>${h}</th>`)}</tr></thead><tbody>${bn.rows.slice(0,100).map((r,i)=>html`<tr><td class="num">${i+1}</td>${r.map(v=>html`<td>${cellTxt(v)}</td>`)}</tr>`)}</tbody></table></div>${bn.rows.length>100?html`<p class="muted">تُعرض أول 100 صف من <span class="num">${nf.format(bn.count)}</span>؛ الكشف كاملاً في التقرير.</p>`:''}`:html`<p class="muted">لم يُرفق كشف بعد.${canW?' أرفقه من «تعديل».':''}</p>`}</section>`));
-  }
-  el.addEventListener('click',async e=>{
-    const k=e.target.closest('[data-p]')?.dataset.p;if(!k||!p)return;
-    try{
-      if(k==='edit')return openProjectEdit(p);
-      if(k==='del'){if(!(await Dlg.confirm({title:'حذف المشروع؟',text:'ينتقل إلى سلة المحذوفات ويمكن استعادته خلال 30 يوماً.',ok:'حذف',danger:true})))return;await repo.remove('projects',id);location.hash='#/projects';toast('نُقل إلى السلة','ok');return}
-      if(k==='rep'){const c=p.currency||'USD',bn=p.bens;
+  const canW=repo.can('projects.write'),canDel=repo.can('projects.delete');
+  return entityDetail({
+    id,title:'ملف مشروع',icon:'project',back:'#/projects',notFound:'المشروع غير موجود',failTitle:'تعذّر فتح المشروع',revs:['projects'],
+    load:async id=>{
+      const p=await repo.get('projects',id,{pii:'none'});await Finance.ready();
+      return p?{rec:p,ctx:{c:p.currency||'USD',diff:round2((Number(p.approved)||0)-(Number(p.exec)||0)),pct:p.approved?Math.round((Number(p.exec)||0)/p.approved*100):0}}:{rec:null};
+    },
+    avatar:()=>html`<span class="medal-sm" style="display:grid;place-items:center;width:72px;height:72px;border-radius:24px;background:color-mix(in oklch,var(--brand) 14%,transparent);color:var(--brand-ink)">${icon('project','lg')}</span>`,
+    name:p=>p.name,
+    sub:p=>html`<p class="muted">${p.funder||''}</p>`,
+    chips:(p,c)=>[html`<span class="chip num">${p.date||'—'}</span>`,html`<span class="chip"><span class="num">${nf.format(p.benCount||0)}</span> مستفيد</span>`,html`<span class="chip ${c.pct>100?'bad':c.pct>=90?'ok':'warn'}">تنفيذ <span class="num">${c.pct}%</span></span>`],
+    actions:()=>[canW&&{k:'edit',icon:'edit',label:'تعديل',cls:'btn-primary btn-sm'},{k:'rep',icon:'receipt',label:'تقرير المشروع'},canDel&&{k:'del',icon:'trash',cls:'btn-ghost btn-icon',aria:'حذف'}],
+    kpis:(p,c)=>[{t:'review',label:'قيمة الاعتماد',value:money(p.approved||0,c.c)},{label:'مبلغ التنفيذ',value:money(p.exec||0,c.c)},
+      {t:c.diff<0?'notArrived':'pending',label:c.diff<0?'تجاوز الاعتماد':'المتبقي من الاعتماد',value:money(Math.abs(c.diff),c.c)},{label:'المستفيدون',value:nf.format(p.benCount||0)}],
+    sections:p=>{const bn=p.bens;return[
+      p.note&&{icon:'doc',title:'ملاحظات',body:html`<p style="white-space:pre-wrap">${p.note}</p>`},
+      {icon:'sheet',title:'كشف المستفيدين',small:bn?html`${bn.file} · <span class="num">${nf.format(bn.count)}</span>`:'',body:bn?.rows?.length?html`<div class="pv-wrap"><table class="pv"><thead><tr><th>#</th>${bn.head.map(h=>html`<th>${h}</th>`)}</tr></thead><tbody>${bn.rows.slice(0,100).map((r,i)=>html`<tr><td class="num">${i+1}</td>${r.map(v=>html`<td>${cellTxt(v)}</td>`)}</tr>`)}</tbody></table></div>${bn.rows.length>100?html`<p class="muted">تُعرض أول 100 صف من <span class="num">${nf.format(bn.count)}</span>؛ الكشف كاملاً في التقرير.</p>`:''}`:html`<p class="muted">لم يُرفق كشف بعد.${canW?' أرفقه من «تعديل».':''}</p>`}]},
+    del:{store:'projects',to:'#/projects',title:'حذف المشروع؟',text:'ينتقل إلى سلة المحذوفات ويمكن استعادته خلال 30 يوماً.'},
+    on:{
+      edit:p=>openProjectEdit(p),
+      rep:p=>{const c=p.currency||'USD',bn=p.bens;
         reportOut({title:`تقرير مشروع — ${p.name}`,sub:`الجهة الممولة: ${p.funder||'—'} · تاريخ التنفيذ ${p.date||'—'}`,filters:p.note||'',stats:[['قيمة الاعتماد',money(p.approved||0,c)],['مبلغ التنفيذ',money(p.exec||0,c)],['الفرق',money(round2((Number(p.approved)||0)-(Number(p.exec)||0)),c)],['المستفيدون',nf.format(p.benCount||0)]],
           sections:bn?.rows?.length?[{title:'كشف المستفيدين',cols:[{l:'#',w:.06,t:'int'},...bn.head.map(h=>({l:h,w:.94/bn.head.length}))],rows:bn.rows.map((r,i)=>[i+1,...r])}]:[]},`project-${p.date||localDate()}-${p.name.replace(/\s+/g,'-').slice(0,24)}`)}
-    }catch(err){toast(err.message,'error')}
+    }
   });
-  effect(()=>{repo.rev('projects')();paint()});
-  return el;
 }
 
 /* المصروفات التشغيلية */
