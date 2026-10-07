@@ -3057,9 +3057,9 @@ Object.assign(VIEWS,{
           <div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-export>${icon('download','sm')}<span>تصدير</span></button><button type="button" class="btn btn-line btn-sm" data-import>${icon('upload','sm')}<span>استيراد ملف</span></button></div></div>
       </div>
       <header class="sec-h"><h3>النسخ المحلية</h3><span class="muted num">${list.length}/${KEEP_BACKUPS}</span></header>
-      ${list.length?html`<div class="list">${list.map(b=>{const n=Object.values(b.counts||{}).reduce((x,y)=>x+y,0);return html`<div class="row"><span class="r-ic">${icon(b.kind==='auto'?'history':b.kind==='pre-restore'?'shield':'backup')}</span><span class="r-t"><b>${fmtDate(b.createdAt)}</b><small>${{auto:'تلقائية',manual:'يدوية','pre-restore':'قبل الاستعادة'}[b.kind]||b.kind} · <span class="num">${fmtSize(b.size)}</span> · <span class="num">${n}</span> سجل</small></span><span class="r-end"><button type="button" class="btn btn-ghost btn-icon" data-dl="${b.id}" aria-label="تنزيل">${icon('download','sm')}</button><button type="button" class="btn btn-ghost btn-icon" data-restore="${b.id}" aria-label="استعادة">${icon('restore','sm')}</button></span></div>`})}</div>`:html`<div class="card empty compact">${illustration('backup')}<h4>لا نسخ محلية بعد</h4><p>تُنشأ أول نسخة تلقائياً عند أول دخول كل يوم.</p></div>`}
+      ${listOrEmpty(list,b=>{const n=Object.values(b.counts||{}).reduce((x,y)=>x+y,0);return html`<div class="row"><span class="r-ic">${icon(b.kind==='auto'?'history':b.kind==='pre-restore'?'shield':'backup')}</span><span class="r-t"><b>${fmtDate(b.createdAt)}</b><small>${{auto:'تلقائية',manual:'يدوية','pre-restore':'قبل الاستعادة'}[b.kind]||b.kind} · <span class="num">${fmtSize(b.size)}</span> · <span class="num">${n}</span> سجل</small></span><span class="r-end"><button type="button" class="btn btn-ghost btn-icon" data-dl="${b.id}" aria-label="تنزيل">${icon('download','sm')}</button><button type="button" class="btn btn-ghost btn-icon" data-restore="${b.id}" aria-label="استعادة">${icon('restore','sm')}</button></span></div>`},html`<div class="card empty compact">${illustration('backup')}<h4>لا نسخ محلية بعد</h4><p>تُنشأ أول نسخة تلقائياً عند أول دخول كل يوم.</p></div>`)}
       ${cl?html`<header class="sec-h"><h3>نسخ السحابة</h3><span class="r-end"><span class="muted num">${cloudList.length}/${KEEP_CLOUD_BACKUPS}</span><button type="button" class="btn btn-line btn-sm" data-cnow>${icon('backup','sm')}<span>نسخة سحابية الآن</span></button></span></header>
-        ${cerr?html`<p class="g-err">${cerr}</p>`:cloudList.length?html`<div class="list">${cloudList.map(b=>{const n=Object.values(b.counts||{}).reduce((x,y)=>x+y,0);return html`<div class="row"><span class="r-ic">${icon('backup')}</span><span class="r-t"><b>${fmtDate(b.createdAt)}</b><small>${b.kind==='manual'?'يدوية':'تلقائية'} · مشفّرة · <span class="num">${fmtSize(b.size)}</span> · <span class="num">${n}</span> سجل</small></span><span class="r-end"><button type="button" class="btn btn-ghost btn-icon" data-crestore="${b.id}" aria-label="استعادة">${icon('restore','sm')}</button><button type="button" class="btn btn-ghost btn-icon" data-cdrop="${b.id}" aria-label="حذف">${icon('trash','sm')}</button></span></div>`})}</div>`:html`<div class="card empty compact">${illustration('backup')}<h4>لا نسخ في السحابة بعد</h4><p>تُرفع نسخة مشفّرة تلقائياً مرة كل يوم من جهاز المدير.</p></div>`}`:''}`));
+        ${cerr?html`<p class="g-err">${cerr}</p>`:listOrEmpty(cloudList,b=>{const n=Object.values(b.counts||{}).reduce((x,y)=>x+y,0);return html`<div class="row"><span class="r-ic">${icon('backup')}</span><span class="r-t"><b>${fmtDate(b.createdAt)}</b><small>${b.kind==='manual'?'يدوية':'تلقائية'} · مشفّرة · <span class="num">${fmtSize(b.size)}</span> · <span class="num">${n}</span> سجل</small></span><span class="r-end"><button type="button" class="btn btn-ghost btn-icon" data-crestore="${b.id}" aria-label="استعادة">${icon('restore','sm')}</button><button type="button" class="btn btn-ghost btn-icon" data-cdrop="${b.id}" aria-label="حذف">${icon('trash','sm')}</button></span></div>`},html`<div class="card empty compact">${illustration('backup')}<h4>لا نسخ في السحابة بعد</h4><p>تُرفع نسخة مشفّرة تلقائياً مرة كل يوم من جهاز المدير.</p></div>`)}`:''}`));
     }
     async function trash(){
       const t=++tk;panel.replaceChildren(toFrag(skelList(3)));
@@ -4790,43 +4790,45 @@ function openCurrencyAdd(){
 VIEWS.sponsorships=function(){
   const canW=repo.can('finance.write');
   const TABS=[['month','الشهر','calendar'],...(canW?[['batch','إدخال دفعي','sheet']]:[]),['fx','العملات','swap']];
-  const month=signal(monthKey()),tab=signal('month'),filt=signal((k=>['all','active','received','pending','review','notArrived','none'].includes(k)?k:'all')(NavFilter.take('sponsorships')));let tk=0,term='',qt=0,io=null;
+  const month=signal(monthKey()),tab=signal('month');let sFilt=(k=>['all','active','received','pending','review','notArrived','none'].includes(k)?k:'all')(NavFilter.take('sponsorships'));let tk=0,sTerm='',ml=null,curMonth=null;const sortCol=new Intl.Collator('ar',{numeric:true});
   const onDispose=disposer();
   const el=viewShell(html`<div class="mod-head rise" style="--i:0"><span class="medal">${icon('sponsor')}</span><div><h2>الكفالات</h2><p>سجل شهري لكل يتيم لا يُستبدل، بعملات متعددة وأسعار صرف مؤرّخة.</p></div><svg class="veins" viewBox="0 0 400 400" aria-hidden="true"><use href="#veins"/></svg></div>
     <div class="rise" style="--i:1" data-bind="msw"></div><div class="rise" style="--i:1">${tabsH(TABS,'month')}</div><section class="sec rise" style="--i:2" data-bind="panel"></section>`);
   const panel=$('[data-bind=panel]',el),msw=$('[data-bind=msw]',el);
   const fail=e=>panel.replaceChildren(toFrag(html`<p class="g-err">${e.message}</p>`));
-  async function paintMonth(){
-    const t=++tk,m=month.peek();panel.oninput=panel.onclick=panel.onchange=null;
-    panel.replaceChildren(toFrag(html`<div class="fin-kpis">${SP_KEYS.map(()=>html`<div class="fk"><div class="skel" style="height:12px;width:60%"></div><div class="skel" style="height:22px;width:40%;margin-top:8px"></div></div>`)}</div>${skelList(5)}`));
-    let os,recs,ds;
-    try{await Finance.refresh();[os,recs,ds]=await Promise.all([repo.list('orphans',{pii:'none'}),Finance.monthRecords(m),repo.can('donors.read')?repo.list('donors',{pii:'none'}):[]])}catch(e){return fail(e)}
-    if(t!==tk)return;
-    const B=Finance.base,dn=new Map(ds.map(d=>[d.id,d.name])),all=[...recs.values()];
-    const by=Object.fromEntries(SP_KEYS.map(k=>[k,all.filter(s=>spStatus(s.status)===k)]));
-    const col=new Intl.Collator('ar',{numeric:true});
-    const rows=os.map(o=>({o,s:recs.get(o.id)||null})).sort((a,b)=>(Number(a.o.code)||1e9)-(Number(b.o.code)||1e9)||col.compare(String(a.o.code),String(b.o.code)));
-    const none=rows.filter(r=>!r.s).length;
-    const cnt={all:rows.length,none,active:rows.filter(r=>r.s&&spStatus(r.s.status)!=='notArrived').length,...Object.fromEntries(SP_KEYS.map(k=>[k,by[k].length]))};
-    panel.replaceChildren(toFrag(html`<div class="fin-kpis">${SP_KEYS.map(k=>{const tt=Finance.totals(by[k]);return html`<div class="fk" data-t="${k}"><small>${SP_STATUS[k][0]}</small><b class="num">${nf.format(by[k].length)}</b><em><span class="num">${money(tt.base,B)}</span>${k==='received'&&tt.base?html` · الصافي <span class="num">${money(tt.net,B)}</span>`:''}</em>${unratedH(tt.unrated)}</div>`})}</div>
-      <div class="toolbar"><label class="search">${icon('search')}<input type="search" data-q value="${term}" placeholder="الاسم أو الرمز أو المتبرع" autocomplete="off" aria-label="بحث"></label>
-        <div class="tool-row"><div class="chips-row">${[['all','الكل'],['active','نشطة'],...SP_KEYS.map(k=>[k,SP_STATUS[k][0]]),['none','بلا سجل']].map(([k,l])=>html`<button type="button" class="chip-btn" data-f="${k}" aria-pressed="${String(filt.peek()===k)}">${l} <span class="num">${cnt[k]}</span></button>`)}</div>
-        <button type="button" class="btn btn-line btn-icon" data-xls aria-label="تصدير Excel">${icon('download','sm')}</button>${canW?html`<button type="button" class="btn btn-line btn-icon" data-sp-import aria-label="استيراد من Excel">${icon('upload','sm')}</button>`:''}</div></div>
-      <div class="list" data-rows></div><div data-sentinel style="height:1px"></div>`));
-    const box=$('[data-rows]',panel);let list=[],shown=0;
-    const row=({o,s})=>{const k=s?spStatus(s.status):'none';return html`<button type="button" class="sp-row" data-sp-open="${o.id}|${m}">${portraitRing(o,44,{pct:false})}<span class="r-t"><b>${o.nameAr||'—'}</b><small><span class="num">OR${o.code}</span>${s?.donorId&&dn.get(s.donorId)?html` · ${dn.get(s.donorId)}`:''}${s?.method?html` · ${optLabel('spMethod',s.method)}`:''}${s?.rev>1?html` · مراجعة <span class="num">${s.rev}</span>`:''}</small></span><span class="amt">${s?html`<b class="num">${money(s.amount,s.currency)}</b>`:''}<span class="chip ${SP_STATUS[k]?.[1]||''}">${SP_STATUS[k]?.[0]||'بلا سجل'}</span></span></button>`};
-    const more=()=>{if(shown>=list.length)return;box.append(toFrag(html`${list.slice(shown,shown+60).map(row)}`));shown=Math.min(list.length,shown+60)};
-    const apply=()=>{const f=filt.peek(),n=normalizeAr(term);list=rows.filter(r=>(f==='all'||(f==='none'?!r.s:f==='active'?r.s&&spStatus(r.s.status)!=='notArrived':r.s&&spStatus(r.s.status)===f))&&(!n||normalizeAr(`${r.o.nameAr} ${r.o.nameEn||''} or${r.o.code} ${r.o.code} ${dn.get(r.s?.donorId)||''}`).includes(n)));shown=0;box.replaceChildren();if(!list.length)box.append(toFrag(html`<div class="empty compact"><h4>${os.length?'لا نتائج':'لا أيتام بعد'}</h4><p>${os.length?'غيّر المرشح أو كلمة البحث.':'أضف الأيتام أولاً ثم سجّل كفالاتهم الشهرية.'}</p></div>`));else more()};
-    apply();
-    io?.disconnect();if('IntersectionObserver' in window){io=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting))more()},{rootMargin:'600px'});io.observe($('[data-sentinel]',panel))}
-    panel.oninput=e=>{if(e.target.matches('[data-q]')){clearTimeout(qt);qt=setTimeout(()=>{term=e.target.value;apply()},160)}};
-    panel.onclick=e=>{
-      const f=e.target.closest('[data-f]');if(f){filt.set(f.dataset.f);$$('[data-f]',panel).forEach(x=>x.setAttribute('aria-pressed',String(x===f)));apply();return}
-      if(e.target.closest('[data-xls]')){const hd=['الرمز','اسم اليتيم','المتبرع','المبلغ','العملة','الحالة','تاريخ الاستلام','الطريقة','رقم العملية',`المعادل (${B})`,`العمولة (${B})`,`الصافي (${B})`,'المراجعة'];
-        const data=rows.map(({o,s})=>{const c=s?Finance.convert(s):null;return[`OR${o.code}`,o.nameAr||'',dn.get(s?.donorId)||'',s?Number(s.amount):'',s?.currency||'',s?SP_STATUS[spStatus(s.status)]?.[0]||'':'بلا سجل',s?.receivedDate||'',optLabel('spMethod',s?.method),s?.txnNo||'',c?.rated?c.value:'',c?.rated?c.fee:'',c?.rated?c.net:'',s?.rev||'']});
-        download(`ghiras-sponsorships-${m}.xlsx`,Xlsx.write([{name:m,rows:[hd,...data],widths:[10,30,22,10,8,14,14,14,18,14,12,14,9]}]),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');toast('تم تجهيز ملف Excel','ok')}
-      if(e.target.closest('[data-sp-import]'))return openSponsorImport();
-    };
+  function mountMonth(){
+    const mk=()=>entityList({
+      embed:true,topFirst:true,skel:5,revs:['sponsorships','donors'],
+      init:{q:sTerm,f:sFilt},onState:x=>{sTerm=x.q;sFilt=x.f},
+      search:{placeholder:'الاسم أو الرمز أو المتبرع'},
+      filters:[{key:'f',options:[['all','الكل'],['active','نشطة'],...SP_KEYS.map(k=>[k,SP_STATUS[k][0]]),['none','بلا سجل']],count:(_,c,k)=>c.cnt[k],
+        test:(r,f)=>f==='all'||(f==='none'?!r.s:f==='active'?r.s&&spStatus(r.s.status)!=='notArrived':r.s&&spStatus(r.s.status)===f)}],
+      toolExtra:html`<button type="button" class="btn btn-line btn-icon" data-xls aria-label="تصدير Excel">${icon('download','sm')}</button>${canW?html`<button type="button" class="btn btn-line btn-icon" data-sp-import aria-label="استيراد من Excel">${icon('upload','sm')}</button>`:''}`,
+      load:async()=>{
+        const m=month.peek();
+        const[os,recs,ds]=await Promise.all([repo.list('orphans',{pii:'none'}),Finance.monthRecords(m),repo.can('donors.read')?repo.list('donors',{pii:'none'}):[]]);
+        await Finance.refresh();
+        const dn=new Map(ds.map(d=>[d.id,d.name])),all=[...recs.values()];
+        const by=Object.fromEntries(SP_KEYS.map(k=>[k,all.filter(s=>spStatus(s.status)===k)]));
+        const rows=os.map(o=>({id:o.id,o,s:recs.get(o.id)||null}));
+        const cnt={all:rows.length,none:rows.filter(r=>!r.s).length,active:rows.filter(r=>r.s&&spStatus(r.s.status)!=='notArrived').length,...Object.fromEntries(SP_KEYS.map(k=>[k,by[k].length]))};
+        return{rows,ctx:(curMonth={m,B:Finance.base,dn,by,cnt,rows})};
+      },
+      sorts:[['code','',(a,b)=>{const col=sortCol;return(Number(a.o.code)||1e9)-(Number(b.o.code)||1e9)||col.compare(String(a.o.code),String(b.o.code))}]],
+      haystack:(r,c)=>`${r.o.nameAr} ${r.o.nameEn||''} or${r.o.code} ${r.o.code} ${c.dn.get(r.s?.donorId)||''}`,
+      top:c=>html`<div class="fin-kpis">${SP_KEYS.map(k=>{const tt=Finance.totals(c.by[k]);return html`<div class="fk" data-t="${k}"><small>${SP_STATUS[k][0]}</small><b class="num">${nf.format(c.by[k].length)}</b><em><span class="num">${money(tt.base,c.B)}</span>${k==='received'&&tt.base?html` · الصافي <span class="num">${money(tt.net,c.B)}</span>`:''}</em>${unratedH(tt.unrated)}</div>`})}</div>`,
+      row:({o,s},c)=>{const k=s?spStatus(s.status):'none';return html`<button type="button" class="sp-row" data-sp-open="${o.id}|${c.m}">${portraitRing(o,44,{pct:false})}<span class="r-t"><b>${o.nameAr||'—'}</b><small><span class="num">OR${o.code}</span>${s?.donorId&&c.dn.get(s.donorId)?html` · ${c.dn.get(s.donorId)}`:''}${s?.method?html` · ${optLabel('spMethod',s.method)}`:''}${s?.rev>1?html` · مراجعة <span class="num">${s.rev}</span>`:''}</small></span><span class="amt">${s?html`<b class="num">${money(s.amount,s.currency)}</b>`:''}<span class="chip ${SP_STATUS[k]?.[1]||''}">${SP_STATUS[k]?.[0]||'بلا سجل'}</span></span></button>`},
+      empty:{
+        none:html`<div class="empty compact"><h4>لا نتائج</h4><p>غيّر المرشح أو كلمة البحث.</p></div>`,
+        all:html`<div class="empty compact"><h4>لا أيتام بعد</h4><p>أضف الأيتام أولاً ثم سجّل كفالاتهم الشهرية.</p></div>`}
+    });
+    ml=mk();panel.oninput=panel.onclick=panel.onchange=null;panel.replaceChildren(ml);
+  }
+  function exportMonth(){
+    const c=curMonth;if(!c)return;const B=c.B,m=c.m;
+    const hd=['الرمز','اسم اليتيم','المتبرع','المبلغ','العملة','الحالة','تاريخ الاستلام','الطريقة','رقم العملية',`المعادل (${B})`,`العمولة (${B})`,`الصافي (${B})`,'المراجعة'];
+    const data=c.rows.map(({o,s})=>{const x=s?Finance.convert(s):null;return[`OR${o.code}`,o.nameAr||'',c.dn.get(s?.donorId)||'',s?Number(s.amount):'',s?.currency||'',s?SP_STATUS[spStatus(s.status)]?.[0]||'':'بلا سجل',s?.receivedDate||'',optLabel('spMethod',s?.method),s?.txnNo||'',x?.rated?x.value:'',x?.rated?x.fee:'',x?.rated?x.net:'',s?.rev||'']});
+    download(`ghiras-sponsorships-${m}.xlsx`,Xlsx.write([{name:m,rows:[hd,...data],widths:[10,30,22,10,8,14,14,14,18,14,12,14,9]}]),'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');toast('تم تجهيز ملف Excel','ok');
   }
   async function paintBatch(){
     const t=++tk,m=month.peek();panel.oninput=panel.onclick=panel.onchange=null;panel.replaceChildren(toFrag(skelList(6)));
@@ -4892,12 +4894,14 @@ VIEWS.sponsorships=function(){
   el.addEventListener('click',e=>{
     const tb=e.target.closest('[data-tab]');if(tb){tab.set(tb.dataset.tab);return}
     const mo=e.target.closest('[data-mo]');if(mo){month.set(monthAdd(month.peek(),Number(mo.dataset.mo)));return}
-    const sp=e.target.closest('[data-sp-open]');if(sp){const[oid,m]=sp.dataset.spOpen.split('|');openSpSheet(oid,m)}
+    const sp=e.target.closest('[data-sp-open]');if(sp){const[oid,m]=sp.dataset.spOpen.split('|');openSpSheet(oid,m);return}
+    if(e.target.closest('[data-xls]'))return exportMonth();
+    if(e.target.closest('[data-sp-import]'))openSponsorImport();
   });
-  onDispose(()=>io?.disconnect());
+  onDispose(()=>ml?.destroy());
   effect(()=>syncTabs(el,TABS,tab()));
   effect(()=>{const m=month(),t=tab();msw.hidden=t==='fx';msw.replaceChildren(toFrag(monthSwH(m)))});
-  effect(()=>{const t=tab();month();repo.rev('sponsorships')();repo.rev('donors')();if(t==='month')paintMonth()});
+  effect(()=>{const t=tab();month();if(t!=='month'){ml?.destroy();ml=null;return}if(ml)ml.reload();else mountMonth()});
   effect(()=>{const t=tab();month();repo.rev('orphanDonor')();if(t==='batch')paintBatch()});
   effect(()=>{const t=tab();repo.rev('fxRates')();repo.rev('currencies')();repo.rev('settings')();if(t==='fx')paintFx()});
   return el;
@@ -6877,13 +6881,15 @@ function entityForm(schema,record=null,extra={}){
 // virtual: نافذة رسم بارتفاع صف ثابت 76 وصفوف .o-row (نمط قائمة الأيتام)؛ بدونه: دفعات 60 عند التمرير
 function entityList(cfg){
   const RH=76,OVER=8,BATCH=60,flt=cfg.filters||[],srt=cfg.sorts||[];
-  const st={q:'',sort:srt[0]?.[0]||''};for(const f of flt)st[f.key]=f.type==='toggle'?false:f.options[0][0];
-  let all=[],byId=new Map(),ids=[],ctx=null,tk=0,qt=0,raf=0,w0=-1,w1=-1,shown=0,io=null,topNodes=[],emptyEl=null;
+  const st={q:'',sort:srt[0]?.[0]||''};for(const f of flt)st[f.key]=f.type==='toggle'?false:f.options[0][0];Object.assign(st,cfg.init);const rz=cfg.embed?'':' rise';
+  let all=[],byId=new Map(),ids=[],ctx=null,tk=0,qt=0,raf=0,w0=-1,w1=-1,shown=0,io=null,topNodes=[],emptyEl=null,dead=false;
   const onDispose=disposer();
-  const tb=cfg.search||flt.length||srt.length>1?html`<div class="toolbar rise" style="--i:1">${cfg.search?html`<label class="search">${icon('search')}<input type="search" data-q placeholder="${cfg.search.placeholder}" enterkeyhint="search" autocomplete="off" aria-label="بحث"></label>`:''}
-    ${flt.length||srt.length>1?html`<div class="tool-row">${flt.length?html`<div class="chips-row">${flt.map(f=>f.type==='toggle'?html`<button type="button" class="chip-btn" data-ft="${f.key}" aria-pressed="false">${f.label}</button>`:f.options.map(([k,l],i)=>html`<button type="button" class="chip-btn" data-fk="${f.key}" data-fv="${k}" aria-pressed="${String(i===0)}">${l}</button>`))}</div>`:''}${srt.length>1?html`<select class="sort" data-sort aria-label="الترتيب">${srt.map(([k,l])=>html`<option value="${k}">${l}</option>`)}</select>`:''}</div>`:''}</div>`:'';
-  const listH=html`<div class="list${cfg.virtual?' o-list':''}${cfg.sec?'':' rise'}"${cfg.sec?'':raw(' style="--i:2"')} data-bind="list">${skelList(cfg.skel||5)}</div>${cfg.virtual?'':html`<div data-sentinel style="height:1px"></div>`}`;
-  const el=viewShell(html`${cfg.head||''}${tb}${cfg.sec?html`<section class="sec rise" style="--i:2" data-bind="panel">${listH}</section>`:listH}`);
+  const tb=cfg.search||flt.length||srt.length>1?html`<div class="toolbar${rz}"${cfg.embed?'':raw(' style="--i:1"')}>${cfg.search?html`<label class="search">${icon('search')}<input type="search" data-q value="${st.q}" placeholder="${cfg.search.placeholder}" enterkeyhint="search" autocomplete="off" aria-label="بحث"></label>`:''}
+    ${flt.length||srt.length>1||cfg.toolExtra?html`<div class="tool-row">${flt.length?html`<div class="chips-row">${flt.map(f=>f.type==='toggle'?html`<button type="button" class="chip-btn" data-ft="${f.key}" aria-pressed="${String(!!st[f.key])}">${f.label}</button>`:f.options.map(([k,l])=>html`<button type="button" class="chip-btn" data-fk="${f.key}" data-fv="${k}" aria-pressed="${String(st[f.key]===k)}">${l}${f.count?html` <span class="num" data-cn></span>`:''}</button>`))}</div>`:''}${srt.length>1?html`<select class="sort" data-sort aria-label="الترتيب">${srt.map(([k,l])=>html`<option value="${k}"${k===st.sort?raw(' selected'):''}>${l}</option>`)}</select>`:''}${cfg.toolExtra||''}</div>`:''}</div>`:'';
+  const listH=html`<div class="list${cfg.virtual?' o-list':''}${cfg.sec||cfg.embed?'':' rise'}"${cfg.sec||cfg.embed?'':raw(' style="--i:2"')} data-bind="list">${skelList(cfg.skel||5)}</div>${cfg.virtual?'':html`<div data-sentinel style="height:1px"></div>`}`;
+  const inner=html`${cfg.head||''}${tb}${cfg.sec?html`<section class="sec rise" style="--i:2" data-bind="panel">${listH}</section>`:listH}`;
+  const el=cfg.embed?Object.assign(document.createElement('div'),{style:'display:contents'}):viewShell(inner);
+  if(cfg.embed)el.append(toFrag(inner));
   const list=$('[data-bind=list]',el),cnt=$('[data-bind=count]',el);
   const rowNode=(o,i)=>{const n=toFrag(cfg.row(o,ctx)).firstElementChild;if(i!=null){n.dataset.i=i;n.style.top=i*RH+'px'}return n};
   function paintWin(force=false){
@@ -6900,10 +6906,10 @@ function entityList(cfg){
   function paintTop(){
     topNodes.forEach(n=>n.remove());topNodes=[];
     if(!cfg.top)return;
-    topNodes=[...toFrag(cfg.top(ctx,{all,ids,st})||'').childNodes];list.before(...topNodes);
+    topNodes=[...toFrag(cfg.top(ctx,{all,ids,st})||'').childNodes];(cfg.topFirst&&$('.toolbar',el)||list).before(...topNodes);
   }
   async function apply(){
-    const t=++tk,term=st.q.trim();let res=[...byId.keys()];
+    if(dead)return;const t=++tk,term=st.q.trim();let res=[...byId.keys()];cfg.onState?.(st);
     if(term)res=cfg.match?await cfg.match(term,{rows:all,byId,ctx}):(n=>res.filter(i=>normalizeAr(cfg.haystack(byId.get(i),ctx)).includes(n)))(normalizeAr(term));
     if(t!==tk)return;
     res=res.filter(i=>{const o=byId.get(i);return o&&flt.every(f=>f.test(o,st[f.key],ctx))});
@@ -6918,9 +6924,10 @@ function entityList(cfg){
   async function load(){
     let r;
     try{r=await cfg.load()}catch(e){list.hidden=false;list.replaceChildren(toFrag(html`<p class="g-err">${e.message}</p>`));return}
-    const t=++tk;all=r.rows;ctx=r.ctx??null;byId=new Map(all.map(x=>[x.id,x]));
+    const t=++tk;if(dead)return;all=r.rows;ctx=r.ctx??null;byId=new Map(all.map(x=>[x.id,x]));
     await cfg.index?.(all,ctx);
     if(t!==tk)return;
+    for(const f of flt)if(f.count)for(const b of $$(`[data-fk="${f.key}"]`,el)){const n=$('[data-cn]',b);if(n)n.textContent=nf.format(f.count(all,ctx,b.dataset.fv))}
     apply();
   }
   el.addEventListener('input',e=>{if(e.target.matches('[data-q]')){clearTimeout(qt);qt=setTimeout(()=>{st.q=e.target.value;apply()},140)}});
@@ -6931,10 +6938,13 @@ function entityList(cfg){
   });
   if(cfg.virtual){addEventListener('scroll',onScroll,{passive:true});addEventListener('resize',onScroll,{passive:true});onDispose(()=>{removeEventListener('scroll',onScroll);removeEventListener('resize',onScroll);cancelAnimationFrame(raf)})}
   else{if('IntersectionObserver' in window){io=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting))more()},{rootMargin:'600px'});io.observe($('[data-sentinel]',el))}onDispose(()=>io?.disconnect())}
-  effect(()=>{(cfg.revs||[]).forEach(s=>repo.rev(s)());load()});
+  const stop=effect(()=>{(cfg.revs||[]).forEach(s=>repo.rev(s)());load()});
   el.reload=load;
+  el.destroy=()=>{dead=true;stop();io?.disconnect();removeEventListener('scroll',onScroll);removeEventListener('resize',onScroll);cancelAnimationFrame(raf)};
   return el;
 }
+
+const listOrEmpty=(items,row,empty)=>items.length?html`<div class="list">${items.map(row)}</div>`:empty;
 
 /* الموظفون */
 VIEWS.staff=function(route){const id=route.params?.id;return id?staffView(id):staffListView()};
