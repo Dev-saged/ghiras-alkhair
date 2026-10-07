@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://raw.githubusercontent.com https://cdn.jsdelivr.net https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.workers.dev; manifest-src 'self' blob: data:; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://raw.githubusercontent.com https://cdn.jsdelivr.net https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.workers.dev; manifest-src 'self' blob: data:; worker-src 'self' blob:; media-src 'self' blob: data:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'self'">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#f4f9ee" id="meta-theme">
@@ -1124,7 +1124,7 @@ details.adv[open] summary{margin-block-end:8px}
 <script>
 'use strict';
 /* ══════════ ١ الثوابت ══════════ */
-const APP_VERSION='1.3.0';
+const APP_VERSION='1.3.1';
 // إعداد السحابة الثابت: يتصل كل جهاز تلقائياً
 const CLOUD_PRESET=Object.freeze({project:'ghiras-alkhair',apiKey:'AIzaSyCmVmQHkelH4t6-STrbBr9CXOb14xuEg8c',worker:'https://ghiras-worker.dev-mr07.workers.dev',org:'ghras'});
 const LITE=document.documentElement.dataset.lite==='1';
@@ -2655,6 +2655,27 @@ function createRepo(dbName,{iter=600000,test=false}={}){
     return{rows,next};
   }
 
+  // سجل التدقيق محلي لكل جهاز؛ يُرفع ما أنشأه هذا الجهاز ويُسحب للمدير ما رفعه الآخرون (علامة _r تمنع إعادة رفع المسحوب)
+  const AUDIT_LOCAL=new Set(['sync','seed','backup']);
+  async function auditOutbox(limit=120){
+    needSess(true);const last=Number(await getSetting('cloud.audit.seq'))||0;let top=last;const rows=[];
+    await T(['audit'],'readonly',(tx,os)=>new Promise((res,rej)=>{
+      const rq=os('audit').openCursor(IDBKeyRange.lowerBound(last,true));
+      rq.onsuccess=()=>{const c=rq.result;if(!c||rows.length>=limit)return res();top=c.key;const v=c.value;if(!v._r&&!AUDIT_LOCAL.has(v.action))rows.push(v);c.continue()};
+      rq.onerror=()=>rej(rq.error);
+    }));
+    return{rows,top};
+  }
+  const auditAck=seq=>{needSess(true);return putSettingSys('cloud.audit.seq',seq)};
+  async function cloudApplyAudit(v){
+    needSess(true);if(!capSet.has('audit.read'))return 0;
+    const at=clean(v?.at,60);if(!/^[\w.-]{8,60}$/.test(at))return 0;
+    const ch=Array.isArray(v.changes)?v.changes.slice(0,40).map(c=>({f:clean(c?.f,40),o:c?.o==null?null:clean(c.o,200),n:c?.n==null?null:clean(c.n,200)})):[];
+    const r={at,ts:Number(v.ts)||0,userId:clean(v.userId,80),userName:clean(v.userName,80),action:clean(v.action,24),entity:clean(v.entity,24),entityId:clean(v.entityId,80),title:clean(v.title,120),changes:ch,reason:clean(v.reason,200),_r:1};
+    let n=0;await T(['audit'],'readwrite',async(tx,os)=>{if(!(await idbReq(os('audit').index('at').count(at)))){os('audit').add(r);n++}});
+    if(n)bump(['audit']);return n;
+  }
+
   async function snapshot({media=false,only=null}={}){
     const names=only||DB_STORES.filter(n=>n!=='backups'&&n!=='syncQueue');const stores={};
     await T(names,'readonly',async(tx,os)=>{for(const n of names)stores[n]=await idbReq(os(n).getAll())});
@@ -2791,7 +2812,7 @@ function createRepo(dbName,{iter=600000,test=false}={}){
     ensureOrphanAccount,resetTempPassword,tempCredentials,accountFor,orphanAccountStats,putMedia,selfSave,selfSub,openSelf,recv:h=>{if(h)clock.recv(String(h))},getMedia,mediaFor,mediaIndex,blindPairs,nextCode,auditFor,libGet,libPut,
     blindOf:async(kind,v)=>{needSess();return Sec.blind(needKeys().hmac,kind,v)},
     save,get,list,count,findBlind,reveal,remove,restore,listTrash,purgeTrash,
-    recordSponsorship,addWalletVersion,currentWallet,stats,auditPage,
+    recordSponsorship,addWalletVersion,currentWallet,stats,auditPage,auditOutbox,auditAck,cloudApplyAudit,
     backupNow,maybeDaily,listBackups,backupBlob,restoreBackup,exportJSON,importData,cloudBackupDue,cloudBackupDone,backupSeal,backupOpen,restoreSynced,exportEncrypted,isEncryptedBackup,openEncrypted,
     ...(test?{_raw:getRaw,_put:(s,r)=>T([s],'readwrite',(tx,os)=>{os(s).put(r)})}:{})
   };
@@ -3519,42 +3540,76 @@ const SELF_FIELDS=Object.freeze(['nameAr','nameEn','dob','gender','martyrName','
 const SELF_SECRET=Object.freeze(['nid','motherNid','guardianNid','accountNumber']);
 const SELF_REQ=Object.freeze(['nameAr','nid','dob','gender','martyrName','martyrDate','lossType','guardianName','guardianRelation','guardianNid','contactPhone','whatsapp','walletType','accountNumber','region','residence']);
 const UNLOCK_H=Object.freeze([24,48,72]);
-// فك ترميز الصورة بمسارين: ImageBitmap أولاً ثم عنصر <img> (يعالج أجهزة ترفض الأول)؛ وإن فشل الاثنان تظهر رسالة واضحة
-const IMG_DECODE_MSG='تعذّر قراءة هذه الصورة؛ قد تكون بصيغة غير مدعومة (مثل HEIC) أو تالفة. التقطها بصيغة JPG أو PNG أو حوّلها ثم أعد المحاولة';
-async function decodeImage(src){
-  if(!(src instanceof Blob))throw new DataError(IMG_DECODE_MSG);
-  if(typeof createImageBitmap==='function'){
-    for(const opt of [undefined,{imageOrientation:'none'}]){
-      try{const b=await createImageBitmap(src,...(opt?[opt]:[]));if(b.width&&b.height)return{img:b,w:b.width,h:b.height,close:()=>b.close?.()}}catch{}
-    }
-  }
-  const url=URL.createObjectURL(src);
-  try{
-    const im=new Image();im.decoding='async';
-    await new Promise((ok,no)=>{im.onload=ok;im.onerror=()=>no(new Error('decode'));im.src=url});
-    try{await im.decode?.()}catch{}
-    if(!im.naturalWidth||!im.naturalHeight)throw new Error('empty');
-    return{img:im,w:im.naturalWidth,h:im.naturalHeight,close(){}};
-  }catch{throw new DataError(IMG_DECODE_MSG)}
-  finally{setTimeout(()=>URL.revokeObjectURL(url),0)}
+// الصورة تُقرأ إلى الذاكرة فور اختيارها وتُعرَّف صيغتها من بايتاتها (لا من امتداد الملف ولا نوعه الذي قد يكون فارغاً)
+const IMG_DECODE_MSG='تعذّر قراءة هذه الصورة؛ جرّب التقاطها بصيغة JPG أو PNG أو أعد اختيارها من المعرض';
+function sniffImage(u){
+  const t=(a,b)=>String.fromCharCode(...u.subarray(a,b));
+  if(u[0]===0xFF&&u[1]===0xD8)return'jpeg';
+  if(u[0]===0x89&&t(1,4)==='PNG')return'png';
+  if(t(0,3)==='GIF')return'gif';
+  if(t(0,4)==='RIFF'&&t(8,12)==='WEBP')return'webp';
+  if(u[0]===0x42&&u[1]===0x4D)return'bmp';
+  if(t(4,8)==='ftyp'){const k=t(8,12);return/^(heic|heix|hevc|hevx|heim|heis|mif1|msf1)$/.test(k)?'heic':/^avi[fs]$/.test(k)?'avif':''}
+  return'';
 }
-async function canvasCompress(file,max,mb){
-  const d=await decodeImage(file);const k=Math.min(1,max/Math.max(d.w,d.h));
+// فك الترميز بعدة مسارات متتالية؛ آخرها بتصغير أثناء الفك لصور الهواتف الضخمة التي تستنفد الذاكرة
+async function decodeImage(src){
+  if(!(src instanceof Blob)||!src.size)throw new DataError(IMG_DECODE_MSG);
+  const bmp=opt=>async()=>{const b=await createImageBitmap(src,...(opt?[opt]:[]));if(!b.width||!b.height)throw 0;return{img:b,w:b.width,h:b.height,close:()=>b.close?.()}};
+  const el=url=>async()=>{const im=new Image();im.decoding='async';await new Promise((ok,no)=>{im.onload=ok;im.onerror=()=>no(0);im.src=url});try{await im.decode?.()}catch{}if(!im.naturalWidth||!im.naturalHeight)throw 0;return{img:im,w:im.naturalWidth,h:im.naturalHeight,close(){}}};
+  const tries=[];
+  if(typeof createImageBitmap==='function')tries.push(bmp(),bmp({imageOrientation:'none'}));
+  tries.push(async()=>{const u=URL.createObjectURL(src);try{return await el(u)()}finally{setTimeout(()=>URL.revokeObjectURL(u),0)}});
+  tries.push(async()=>el(await new Promise((ok,no)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result));fr.onerror=()=>no(0);fr.readAsDataURL(src)}))());
+  if(typeof createImageBitmap==='function')tries.push(bmp({resizeWidth:2400,resizeQuality:'medium'}),bmp({resizeWidth:1200,resizeQuality:'low'}));
+  for(const t of tries){try{return await t()}catch{}}
+  throw new DataError(IMG_DECODE_MSG);
+}
+// HEIC/HEIF لا يفكّه أي متصفح؛ يُحوَّل داخل إطار معزول (sandbox) له سياسته الخاصة لأن المكتبة تحتاج eval، فلا تُخفَّف سياسة الصفحة الرئيسية
+function heicToJpeg(buf){
+  return new Promise((ok,no)=>{
+    const f=document.createElement('iframe');f.sandbox='allow-scripts';f.hidden=true;f.setAttribute('aria-hidden','true');f.src='heic-frame.html';
+    const id=uid(),done=(fn,v)=>{clearTimeout(tm);removeEventListener('message',on);f.remove();fn(v)},tm=setTimeout(()=>done(no,new Error('timeout')),90000);
+    const on=e=>{if(e.source!==f.contentWindow||e.data?.id!==id)return;e.data.buf instanceof ArrayBuffer?done(ok,new Blob([e.data.buf],{type:'image/jpeg'})):done(no,new Error(String(e.data.err||'heic')))};
+    addEventListener('message',on);
+    f.onload=()=>f.contentWindow.postMessage({id,buf},'*',[buf]);f.onerror=()=>done(no,new Error('frame'));
+    document.body.append(f);
+  });
+}
+async function canvasCompress(src,max,mb){
+  const d=await decodeImage(src);const k=Math.min(1,max/Math.max(d.w,d.h));
   const c=document.createElement('canvas');c.width=Math.max(1,Math.round(d.w*k));c.height=Math.max(1,Math.round(d.h*k));c.getContext('2d').drawImage(d.img,0,0,c.width,c.height);d.close();
-  let q=.85,b=null;do{b=await new Promise(res=>c.toBlob(res,'image/webp',q));q-=.12}while(b&&b.size>mb*1048576&&q>.3);
-  return b||file;
+  const enc=(t,q)=>new Promise(res=>c.toBlob(res,t,q));
+  let type='image/webp',q=.85,b=await enc(type,q);
+  if(!b||b.type!=='image/webp'){type='image/jpeg';b=await enc(type,q)}
+  while(b&&b.size>mb*1048576&&q>.3){q-=.12;b=await enc(type,q)}
+  return b||src;
 }
 function thumbOf(bmp,bw=bmp.width,bh=bmp.height){const s=208,c=document.createElement('canvas');c.width=c.height=s;const x=c.getContext('2d'),m=Math.min(bw,bh);x.imageSmoothingQuality='high';x.drawImage(bmp,(bw-m)/2,(bh-m)/2*.6,m,m,0,0,s,s);const w=c.toDataURL('image/webp',.82);return w.startsWith('data:image/webp')?w:c.toDataURL('image/jpeg',.84)}
+const RAW_IMG_MAX=6*1048576;
 async function compressImage(file,kind,onStatus){
-  if(!/^image\//.test(file?.type||''))throw new DataError('الملف ليس صورة');
+  if(!file||!(file instanceof Blob))throw new DataError('الملف ليس صورة');
+  if(!file.size)throw new DataError('الملف فارغ أو لم يعد متاحاً؛ أعد اختيار الصورة');
   if(file.size>30*1048576)throw new DataError('الصورة أكبر من 30MB');
   const sp=IMG_SPEC[kind]||EXTRA_IMG[kind];if(!sp)throw new DataError('نوع مرفق غير معروف');
+  let buf;try{buf=await file.arrayBuffer()}catch{throw new DataError('تعذّر قراءة الملف من الجهاز؛ أعد اختيار الصورة')}
+  const fmt=sniffImage(new Uint8Array(buf,0,Math.min(32,buf.byteLength)));
+  if(!fmt&&!/^image\//.test(file.type||'')&&!/\.(jpe?g|png|webp|gif|bmp|avif|heic|heif)$/i.test(file.name||''))throw new DataError('الملف ليس صورة');
+  let src;
+  if(fmt==='heic'){
+    onStatus?.('تحويل صورة HEIC…');
+    try{src=await heicToJpeg(buf.slice(0))}catch{throw new DataError('تعذّر تحويل صورة HEIC؛ غيّر صيغة الكاميرا إلى JPG (الأكثر توافقاً) أو أرسلها لنفسك ثم اختر النسخة المحوّلة')}
+  }else src=new Blob([buf],{type:fmt?'image/'+fmt:(file.type||'image/jpeg')});
   const lib=await Lib.load('imgc').catch(()=>false);
   onStatus?.(lib?'المكتبة موجودة — جاري الضغط':'ضغط مدمج — المكتبة غير متاحة حالياً');
   let out=null;
-  if(lib){try{out=await globalThis.imageCompression(file,{maxSizeMB:sp.mb,maxWidthOrHeight:sp.max,useWebWorker:false,fileType:'image/webp',initialQuality:.82})}catch{out=null}}
-  if(!out)out=await canvasCompress(file,sp.max,sp.mb);
-  if(out.size>=file.size&&/image\/(webp|jpeg)/.test(file.type))out=file;
+  if(lib){try{out=await globalThis.imageCompression(new File([src],'image.'+(src.type.split('/')[1]||'jpg').replace('jpeg','jpg'),{type:src.type}),{maxSizeMB:sp.mb,maxWidthOrHeight:sp.max,useWebWorker:false,fileType:'image/webp',initialQuality:.82})}catch{out=null}}
+  if(!out)try{out=await canvasCompress(src,sp.max,sp.mb)}catch(e){
+    const ok=fmt&&src.size<=RAW_IMG_MAX&&await decodeImage(src).then(d=>{d.close();return true},()=>false);
+    if(ok){out=src;toast('حُفظت الصورة الأصلية دون ضغط','warn')}
+    else throw new DataError(`${IMG_DECODE_MSG} (الصيغة: ${fmt==='heic'?'HEIC محوّلة':fmt||'غير معروفة'} · ${fmtSize(file.size)})`);
+  }
+  if(out.size>=src.size&&/image\/(webp|jpeg)/.test(src.type)&&fmt!=='heic')out=src;
   const d=await decodeImage(out).catch(()=>null);
   const res={blob:out,before:file.size,after:out.size,w:d?.w||0,h:d?.h||0,thumb:kind==='portrait'&&d?thumbOf(d.img,d.w,d.h):null,engine:lib?'lib':'builtin'};
   d?.close();return res;
@@ -5889,9 +5944,9 @@ VIEWS.reports=function(route){
 /* ══════════ ٣٩ السحابة: Firestore عبر REST وخادم التوقيع والمزامنة ══════════ */
 const CLOUD_BUNDLE=new Set(['orphans','guardians','wallets','sponsorships','aid','followups','orphanDonor']);
 const CLOUD_FLAT=Object.freeze(['donors','aidTypes','currencies','fxRates','letterheads','programs','tags','changeRequests','regCodes','regRequests','settings','staff','staffPay','projects','expenses']);
-const CLOUD_PULL=Object.freeze(['settings','currencies','fxRates','aidTypes','letterheads','programs','tags','donors','users','orphans','changeRequests','regCodes','regRequests','selfSubs','staff','staffPay','projects','expenses']);
+const CLOUD_PULL=Object.freeze(['settings','currencies','fxRates','aidTypes','letterheads','programs','tags','donors','users','orphans','changeRequests','regCodes','regRequests','selfSubs','staff','staffPay','projects','expenses','audit']);
 const CLOUD_SELF=new Set(['settings','currencies','fxRates','aidTypes','letterheads']);
-const CLOUD_NEED=Object.freeze({staff:'staff.read',staffPay:'staff.read',projects:'projects.read',expenses:'expenses.read',selfSubs:'orphans.write',donors:'donors.read',users:'users.manage',orphans:'orphans.read',mediaIdx:'orphans.read',changeRequests:'orphans.read',regCodes:'reg.read',regRequests:'reg.read',programs:'orphans.read',tags:'orphans.read'});
+const CLOUD_NEED=Object.freeze({staff:'staff.read',staffPay:'staff.read',projects:'projects.read',expenses:'expenses.read',audit:'audit.read',selfSubs:'orphans.write',donors:'donors.read',users:'users.manage',orphans:'orphans.read',mediaIdx:'orphans.read',changeRequests:'orphans.read',regCodes:'reg.read',regRequests:'reg.read',programs:'orphans.read',tags:'orphans.read'});
 const CHUNK=700000;
 // ملف اليتيم v2: حقل `o` للملف و`g` للوصي وحقل `r_<حرف>_<معرّف>` لكل سجل فرعي؛ يُرفع المتغيّر وحده، والحذف علامة {_del}
 const KID_AB=Object.freeze({wallets:'w',sponsorships:'s',aid:'a',followups:'f',orphanDonor:'l'});
@@ -5912,7 +5967,7 @@ function cloudCfg(raw){
 const b64std=bytes=>{const x=b64u.enc(bytes).replace(/-/g,'+').replace(/_/g,'/');return x+'='.repeat((4-x.length%4)%4)};
 // مرآة قواعد الكتابة: لا يُرفع ما سترفضه السحابة فيتعطل الطابور
 const CL_WR=new Set(['admin','officer','accountant']),CL_FIN=new Set(['admin','accountant']);
-const canPush=(role,s,id='')=>role==='admin'||(s==='settings'?(CL_FIN.has(role)&&/^finance\./.test(id))||(CL_WR.has(role)&&/^rcpt[.:]/.test(id)):['donors','currencies','fxRates','staff','staffPay','expenses'].includes(s)?CL_FIN.has(role):s==='projects'?CL_WR.has(role):s==='aidTypes'?CL_WR.has(role):s==='changeRequests'?CL_WR.has(role)||role==='orphan':s==='regCodes'||s==='regRequests'?role==='officer':s==='media'||s==='selfSubs'?CL_WR.has(role)||role==='orphan':CLOUD_BUNDLE.has(s)?CL_WR.has(role):false);
+const canPush=(role,s,id='')=>role==='admin'||(s==='settings'?(CL_FIN.has(role)&&/^finance\./.test(id))||(CL_WR.has(role)&&/^rcpt[.:]/.test(id)):['donors','currencies','fxRates','staff','staffPay','expenses'].includes(s)?CL_FIN.has(role):s==='projects'?CL_WR.has(role):s==='aidTypes'?CL_WR.has(role):s==='changeRequests'?CL_WR.has(role)||role==='orphan':s==='audit'?CL_WR.has(role):s==='regCodes'||s==='regRequests'?role==='officer':s==='media'||s==='selfSubs'?CL_WR.has(role)||role==='orphan':CLOUD_BUNDLE.has(s)?CL_WR.has(role):false);
 const tsKey=t=>{const m=/^(.*?)(?:\.(\d+))?Z$/.exec(String(t||''));return m?`${m[1]}.${(m[2]||'').padEnd(9,'0')}`:''};
 const FV=Object.freeze({s:v=>({stringValue:String(v)}),i:v=>({integerValue:String(Math.trunc(Number(v)||0))}),b:v=>({booleanValue:!!v})});
 const fval=(d,k)=>{const x=d?.fields?.[k];if(!x)return undefined;if('stringValue' in x)return x.stringValue;if('integerValue' in x)return Number(x.integerValue);if('booleanValue' in x)return x.booleanValue;if('timestampValue' in x)return x.timestampValue;if('bytesValue' in x)return x.bytesValue;return undefined};
@@ -6029,6 +6084,19 @@ const Cloud=(()=>{
     await repo.syncAck(acked);
     return{n:q.length,acked:acked.length};
   }
+  // رفع سجل التدقيق: وثيقة لكل صف بمعرّف الـHLC (فريد لكل جهاز)؛ رفض القواعد يؤجّل المحاولة نصف ساعة ولا يوقف المزامنة
+  let auditHold=0;
+  async function pushAudit(){
+    if(Date.now()<auditHold||wmust||!canPush(repo.role,'audit'))return;
+    for(let g=0;g<20;g++){
+      const{rows,top}=await repo.auditOutbox(120);
+      if(rows.length){
+        const w=rows.map(a=>{const{seq:_s,...v}=a;return up('audit',a.at.replace(/[^\w.-]/g,'_'),{d:FV.s(JSON.stringify(v)),h:FV.s(a.at)})});
+        if(!(await tryCommit(withPulse(w,{audit:0})))){auditHold=Date.now()+30*60e3;return}
+      }
+      await repo.auditAck(top);if(rows.length<120)break;
+    }
+  }
   // وثائق قديمة (حقل d واحد) رُصدت أثناء السحب؛ يرقّيها المدير إلى v2
   const legacy=new Set();
   function bundleOf(d,oid){
@@ -6055,6 +6123,7 @@ const Cloud=(()=>{
     if(coll==='orphans')return repo.cloudApplyBundle(bundleOf(d,id),id);
     let v;try{v=JSON.parse(fval(d,'d')||'null')}catch{return 0}if(!v)return 0;
     if(coll==='users')return repo.cloudApplyUser(v);
+    if(coll==='audit')return repo.cloudApplyAudit(v);
     if(coll==='settings')return repo.cloudApplySetting(v);
     if(coll==='selfSubs')return applySelfSub(v,fval(d,'ts'));
     if(coll==='mediaIdx'){
@@ -6167,6 +6236,7 @@ const Cloud=(()=>{
         if(full){await repo.setCloudCursor({p:{},t:{}});await repo.setCloudCursor({p:{},t:{}},true)}
         rejected=0;let p=0;
         for(let r=0;r<60;r++){const x=await push();p+=x.n;if(x.n<400||!x.acked)break}
+        await pushAudit().catch(e=>{if(e.status===401||e.status===403||e.status===0||e.code==='NETWORK'||e.code==='TIMEOUT')throw e});
         const n=await pull();
         if(legacy.size&&repo.role==='admin'&&!wmust)await upgradeLegacy().catch(()=>{});
         set({status:'ok',last:Date.now(),pending:await repo.syncCount(),msg:rejected?`رفضت السحابة ${nf.format(rejected)} تعديلاً خارج صلاحيتك`:''});
@@ -7422,6 +7492,8 @@ VIEWS.test=function(){
       [kidField('followups','f1')]:{stringValue:JSON.stringify({id:'f1',orphanId:'o1',_hlc:'a7',note:'جديد'})},[kidField('followups','f2')]:{stringValue:JSON.stringify({_del:1,s:'followups',id:'f2',_hlc:'a9'})}}};
     const b=Cloud.bundleOf(d,'o1');return b.o.city==='جديد'&&b.fu.length===1&&b.fu[0].note==='جديد'&&b.x.length===1&&b.x[0][1]==='f2'});
   t('فهرس البحث في الـWorker',async()=>{await Work.run('index',{key:'selftest',docs:[{id:1,code:'1',name:'أحمد علي',t:'أحمد علي غزة'},{id:2,code:'2',name:'سارة',t:'سارة رفح'}]});const r=await Work.run('query',{key:'selftest',q:'احمد'});return r.length===1&&r[0]===1});
+  t('كشف صيغة الصورة من البايتات',()=>{const f=(...b)=>sniffImage(Uint8Array.from([...b,...Array(32).fill(0)]));return f(0xFF,0xD8,0xFF)==='jpeg'&&f(0x89,0x50,0x4E,0x47)==='png'&&sniffImage(Uint8Array.from([0,0,0,24,...te.encode('ftypheic'),...Array(20).fill(0)]))==='heic'&&f(1,2,3)===''});
+  t('سجل التدقيق يُرفع من كل دور كاتب فقط',()=>canPush('officer','audit','x')&&canPush('admin','audit','x')&&!canPush('viewer','audit','x')&&!canPush('orphan','audit','x'));
   t('رقم الهوية: خوارزمية التحقق',()=>nidValid('123456782')&&!nidValid('123456789')&&!nidValid('12345'));
   (async()=>{
     let pass=0;const rows=[];
