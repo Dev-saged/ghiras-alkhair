@@ -3788,68 +3788,33 @@ VIEWS.orphans=function(route){
   return orphanListView();
 };
 function orphanListView(){
-  const q=signal(''),status=signal('all'),inc=signal(false),sort=signal('code');
-  const onDispose=disposer();let all=[],byId=new Map(),ids=[],tk=0,qt=0,w0=-1,w1=-1,raf=0;const RH=76,OVER=8;
-  const canW=repo.can('orphans.write');
-  const el=viewShell(html`<div class="o-head rise" style="--i:0"><div><h2>الأيتام</h2><p class="muted" data-bind="count">جارٍ التحميل…</p></div>
-    ${canW?html`<div class="btn-row"><a class="btn btn-line btn-sm" href="#/orphans/import">${icon('upload','sm')}<span>استيراد</span></a><a class="btn btn-primary btn-sm" href="#/orphans/new">${icon('plus','sm')}<span>يتيم جديد</span></a></div>`:''}</div>
-    <div class="toolbar rise" style="--i:1"><label class="search">${icon('search')}<input type="search" data-q placeholder="الاسم، الرمز، رقم الهوية أو الهاتف" enterkeyhint="search" autocomplete="off" aria-label="بحث"></label>
-      <div class="tool-row"><div class="chips-row">${[['all','الكل'],...OPTS.status].map(([k,l])=>html`<button type="button" class="chip-btn" data-st="${k}" aria-pressed="${String(k==='all')}">${l}</button>`)}<button type="button" class="chip-btn" data-inc aria-pressed="false">غير مكتمل</button></div>
-      <select class="sort" data-sort aria-label="الترتيب"><option value="code">الرمز</option><option value="name">الاسم</option><option value="recent">الأحدث</option><option value="pct">الأقل اكتمالاً</option></select></div></div>
-    <div class="list o-list rise" style="--i:2" data-bind="list">${skelList(6)}</div>`);
-  const list=$('[data-bind=list]',el),cnt=$('[data-bind=count]',el);
-  const oRow=o=>{const a=ageOf(o.dob);return html`<a class="o-row" href="#/orphans/${o.id}">${portraitRing(o,56)}<span class="r-t"><b>${o.nameAr||'—'}</b><small><span class="num">OR${o.code}</span>${a?html` · ${ageShort(a)}`:''}${o.region?html` · ${o.region}`:''}${o.guardianName?html` · ${o.guardianName}`:''}</small></span><span class="r-end">${o.selfLock&&selfEditable(o)?html`<span class="chip info">مفتوح للتعديل</span>`:''}${o.status&&o.status!=='active'?html`<span class="chip ${o.status==='suspended'?'bad':'warn'}">${optLabel('status',o.status)}</span>`:''}${icon('chev','sm mirror')}</span></a>`};
-  // قائمة افتراضية حقيقية: يُرسم ما يظهر في الشاشة مع هامش، والبقية فراغ بارتفاعه؛ ٧٠٠ ملف = بضع عشرات من العقد فقط
-  function paintWin(force=false){
-    const n=ids.length;if(!n||!list.classList.contains('virt'))return;
-    const top=list.getBoundingClientRect().top,a=Math.max(0,Math.floor(-top/RH)-OVER),b=Math.min(n,Math.ceil((innerHeight-top)/RH)+OVER);
-    if(!force&&a===w0&&b===w1)return;w0=a;w1=b;
-    const have=new Set(),front=document.createDocumentFragment(),back=document.createDocumentFragment();let lo=Infinity;
-    for(const c of [...list.children]){const i=+c.dataset.i;if(i<a||i>=b)c.remove();else{have.add(i);if(i<lo)lo=i}}
-    for(let i=a;i<b;i++){
-      if(have.has(i))continue;const o=byId.get(ids[i]);if(!o)continue;
-      const node=toFrag(oRow(o)).firstElementChild;node.dataset.i=i;node.style.top=i*RH+'px';(i<lo?front:back).append(node);
-    }
-    list.prepend(front);list.append(back);
-  }
-  const onScroll=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;paintWin()})};
-  async function apply(){
-    const t=++tk;let res=[...byId.keys()];const term=q.peek().trim();
-    if(term){
-      const qd=normalizeAr(term).replace(/[\s()+-]/g,''),qq=/^\d{6,}$/.test(qd)?qd:term;
-      const found=await Work.run('query',{key:'orphans',q:qq});
-      res=found??(await Work.run('index',{key:'orphans',docs:docsOf(all)}),await Work.run('query',{key:'orphans',q:qq}))??[];
-      const d=normDigits(term);
-      if(/^\d{9}$/.test(d)){const hits=new Set(res);for(const o of await repo.findBlind('orphans','nid',d,{pii:'none'}).catch(()=>[]))hits.add(o.id);const gs=await repo.findBlind('guardians','nid',d,{pii:'none'}).catch(()=>[]);for(const g of gs)for(const o of all)if(o.guardianId===g.id)hits.add(o.id);res=[...hits]}
-    }
-    if(t!==tk)return;
-    const st=status.peek(),onlyInc=inc.peek();
-    res=res.filter(i=>{const o=byId.get(i);return o&&(st==='all'||o.status===st)&&(!onlyInc||(o.pct||0)<100)});
-    if(!term){const s=sort.peek();const col=new Intl.Collator('ar',{numeric:true,sensitivity:'base'});res.sort((a,b)=>{const x=byId.get(a),y=byId.get(b);return s==='name'?col.compare(x.nameAr||'',y.nameAr||''):s==='recent'?String(y._hlc).localeCompare(String(x._hlc)):s==='pct'?(x.pct||0)-(y.pct||0):(Number(x.code)||1e9)-(Number(y.code)||1e9)||col.compare(String(x.code),String(y.code))})}
-    ids=res;w0=w1=-1;list.replaceChildren();list.classList.toggle('virt',ids.length>0);list.style.height=ids.length?ids.length*RH+'px':'';
-    if(!ids.length)list.append(toFrag(all.length?html`<div class="empty compact"><h4>لا نتائج</h4><p>جرّب كلمة بحث أخرى أو أزل المرشحات.</p></div>`:html`<div class="empty">${illustration('orphans')}<h4>لم يُسجَّل أي يتيم بعد</h4><p>أضف ملفاً جديداً أو استورد ملفات Excel الحالية دفعة واحدة.</p>${canW?html`<div class="btn-row"><a class="btn btn-primary" href="#/orphans/new">${icon('plus','sm')}<span>يتيم جديد</span></a><a class="btn btn-ghost" href="#/orphans/import">${icon('upload','sm')}<span>استيراد</span></a></div>`:''}</div>`));
-    else paintWin(true);
-    const incN=all.filter(o=>(o.pct||0)<100).length;
-    cnt.textContent=`${nf.format(all.length)} ملف · ${nf.format(incN)} غير مكتمل${term||st!=='all'||onlyInc?` · النتائج ${nf.format(ids.length)}`:''}`;
-  }
+  const canW=repo.can('orphans.write'),col=new Intl.Collator('ar',{numeric:true,sensitivity:'base'});
   const localNum=d=>/^97[02]\d{9}$/.test(d||'')?'0'+d.slice(3):'';
   const docsOf=arr=>arr.map(o=>({id:o.id,code:o.code,name:o.nameAr,t:[o.nameAr,o.nameEn,'or'+o.code,o.code,o.guardianName,o.martyrName,o.contactPhone,o.whatsapp,localNum(o.contactPhone),localNum(o.whatsapp),o.region,o.city,o.residence].filter(Boolean).join(' ')}));
-  async function load(){
-    try{all=await repo.list('orphans',{pii:'none'})}catch(e){list.replaceChildren(toFrag(html`<p class="g-err">${e.message}</p>`));return}
-    byId=new Map(all.map(o=>[o.id,o]));
-    await Work.run('index',{key:'orphans',docs:docsOf(all)});
-    apply();
-  }
-  el.addEventListener('input',e=>{if(e.target.matches('[data-q]')){clearTimeout(qt);qt=setTimeout(()=>{q.set(e.target.value);apply()},140)}});
-  el.addEventListener('change',e=>{if(e.target.matches('[data-sort]')){sort.set(e.target.value);apply()}});
-  el.addEventListener('click',e=>{
-    const s=e.target.closest('[data-st]');if(s){status.set(s.dataset.st);$$('[data-st]',el).forEach(b=>b.setAttribute('aria-pressed',String(b===s)));apply();return}
-    const i=e.target.closest('[data-inc]');if(i){inc.set(!inc.peek());i.setAttribute('aria-pressed',String(inc.peek()));apply()}
+  const byCode=(x,y)=>(Number(x.code)||1e9)-(Number(y.code)||1e9)||col.compare(String(x.code),String(y.code));
+  return entityList({
+    virtual:true,skel:6,revs:['orphans'],keepSearchOrder:true,
+    head:html`<div class="o-head rise" style="--i:0"><div><h2>الأيتام</h2><p class="muted" data-bind="count">جارٍ التحميل…</p></div>
+    ${canW?html`<div class="btn-row"><a class="btn btn-line btn-sm" href="#/orphans/import">${icon('upload','sm')}<span>استيراد</span></a><a class="btn btn-primary btn-sm" href="#/orphans/new">${icon('plus','sm')}<span>يتيم جديد</span></a></div>`:''}</div>`,
+    search:{placeholder:'الاسم، الرمز، رقم الهوية أو الهاتف'},
+    filters:[{key:'status',options:[['all','الكل'],...OPTS.status],test:(o,v)=>v==='all'||o.status===v},{key:'inc',type:'toggle',label:'غير مكتمل',test:(o,on)=>!on||(o.pct||0)<100}],
+    sorts:[['code','الرمز',byCode],['name','الاسم',(x,y)=>col.compare(x.nameAr||'',y.nameAr||'')],['recent','الأحدث',(x,y)=>String(y._hlc).localeCompare(String(x._hlc))],['pct','الأقل اكتمالاً',(x,y)=>(x.pct||0)-(y.pct||0)]],
+    load:async()=>({rows:await repo.list('orphans',{pii:'none'})}),
+    index:all=>Work.run('index',{key:'orphans',docs:docsOf(all)}),
+    match:async(term,{rows,byId})=>{
+      const qd=normalizeAr(term).replace(/[\s()+-]/g,''),qq=/^\d{6,}$/.test(qd)?qd:term;
+      const found=await Work.run('query',{key:'orphans',q:qq});
+      let res=found??(await Work.run('index',{key:'orphans',docs:docsOf(rows)}),await Work.run('query',{key:'orphans',q:qq}))??[];
+      const d=normDigits(term);
+      if(/^\d{9}$/.test(d)){const hits=new Set(res);for(const o of await repo.findBlind('orphans','nid',d,{pii:'none'}).catch(()=>[]))hits.add(o.id);const gs=await repo.findBlind('guardians','nid',d,{pii:'none'}).catch(()=>[]);for(const g of gs)for(const o of rows)if(o.guardianId===g.id)hits.add(o.id);res=[...hits]}
+      return res;
+    },
+    row:o=>{const a=ageOf(o.dob);return html`<a class="o-row" href="#/orphans/${o.id}">${portraitRing(o,56)}<span class="r-t"><b>${o.nameAr||'—'}</b><small><span class="num">OR${o.code}</span>${a?html` · ${ageShort(a)}`:''}${o.region?html` · ${o.region}`:''}${o.guardianName?html` · ${o.guardianName}`:''}</small></span><span class="r-end">${o.selfLock&&selfEditable(o)?html`<span class="chip info">مفتوح للتعديل</span>`:''}${o.status&&o.status!=='active'?html`<span class="chip ${o.status==='suspended'?'bad':'warn'}">${optLabel('status',o.status)}</span>`:''}${icon('chev','sm mirror')}</span></a>`},
+    empty:{
+      none:html`<div class="empty compact"><h4>لا نتائج</h4><p>جرّب كلمة بحث أخرى أو أزل المرشحات.</p></div>`,
+      all:html`<div class="empty">${illustration('orphans')}<h4>لم يُسجَّل أي يتيم بعد</h4><p>أضف ملفاً جديداً أو استورد ملفات Excel الحالية دفعة واحدة.</p>${canW?html`<div class="btn-row"><a class="btn btn-primary" href="#/orphans/new">${icon('plus','sm')}<span>يتيم جديد</span></a><a class="btn btn-ghost" href="#/orphans/import">${icon('upload','sm')}<span>استيراد</span></a></div>`:''}</div>`},
+    count:({all,shown,term,st})=>`${nf.format(all.length)} ملف · ${nf.format(all.filter(o=>(o.pct||0)<100).length)} غير مكتمل${term||st.status!=='all'||st.inc?` · النتائج ${nf.format(shown)}`:''}`
   });
-  addEventListener('scroll',onScroll,{passive:true});addEventListener('resize',onScroll,{passive:true});
-  onDispose(()=>{removeEventListener('scroll',onScroll);removeEventListener('resize',onScroll);cancelAnimationFrame(raf)});
-  effect(()=>{repo.rev('orphans')();load()});
-  return el;
 }
 function kvRow(label,value,{wide=false,reveal=null,cls=''}={}){return html`<div class="${wide?'wide':''}"><small>${label}</small><span class="rv"><b class="${cls}" ${reveal?raw(`data-rv-val="${esc(reveal)}"`):''}>${value==null||value===''?'—':value}</b>${reveal?html`<button type="button" data-reveal="${reveal}" aria-label="إظهار">${icon('eye','sm')}</button>`:''}</span></div>`}
 function orphanProfileView(id){
@@ -6908,6 +6873,69 @@ function entityForm(schema,record=null,extra={}){
   }});
 }
 
+/* ══════════ ٤٧ محرك القوائم: قائمة من schema ══════════ */
+// virtual: نافذة رسم بارتفاع صف ثابت 76 وصفوف .o-row (نمط قائمة الأيتام)؛ بدونه: دفعات 60 عند التمرير
+function entityList(cfg){
+  const RH=76,OVER=8,BATCH=60,flt=cfg.filters||[],srt=cfg.sorts||[];
+  const st={q:'',sort:srt[0]?.[0]||''};for(const f of flt)st[f.key]=f.type==='toggle'?false:f.options[0][0];
+  let all=[],byId=new Map(),ids=[],ctx=null,tk=0,qt=0,raf=0,w0=-1,w1=-1,shown=0,io=null,topNodes=[],emptyEl=null;
+  const onDispose=disposer();
+  const tb=cfg.search||flt.length||srt.length>1?html`<div class="toolbar rise" style="--i:1">${cfg.search?html`<label class="search">${icon('search')}<input type="search" data-q placeholder="${cfg.search.placeholder}" enterkeyhint="search" autocomplete="off" aria-label="بحث"></label>`:''}
+    ${flt.length||srt.length>1?html`<div class="tool-row">${flt.length?html`<div class="chips-row">${flt.map(f=>f.type==='toggle'?html`<button type="button" class="chip-btn" data-ft="${f.key}" aria-pressed="false">${f.label}</button>`:f.options.map(([k,l],i)=>html`<button type="button" class="chip-btn" data-fk="${f.key}" data-fv="${k}" aria-pressed="${String(i===0)}">${l}</button>`))}</div>`:''}${srt.length>1?html`<select class="sort" data-sort aria-label="الترتيب">${srt.map(([k,l])=>html`<option value="${k}">${l}</option>`)}</select>`:''}</div>`:''}</div>`:'';
+  const listH=html`<div class="list${cfg.virtual?' o-list':''}${cfg.sec?'':' rise'}"${cfg.sec?'':raw(' style="--i:2"')} data-bind="list">${skelList(cfg.skel||5)}</div>${cfg.virtual?'':html`<div data-sentinel style="height:1px"></div>`}`;
+  const el=viewShell(html`${cfg.head||''}${tb}${cfg.sec?html`<section class="sec rise" style="--i:2" data-bind="panel">${listH}</section>`:listH}`);
+  const list=$('[data-bind=list]',el),cnt=$('[data-bind=count]',el);
+  const rowNode=(o,i)=>{const n=toFrag(cfg.row(o,ctx)).firstElementChild;if(i!=null){n.dataset.i=i;n.style.top=i*RH+'px'}return n};
+  function paintWin(force=false){
+    const n=ids.length;if(!n||!list.classList.contains('virt'))return;
+    const top=list.getBoundingClientRect().top,a=Math.max(0,Math.floor(-top/RH)-OVER),b=Math.min(n,Math.ceil((innerHeight-top)/RH)+OVER);
+    if(!force&&a===w0&&b===w1)return;w0=a;w1=b;
+    const have=new Set(),front=document.createDocumentFragment(),back=document.createDocumentFragment();let lo=Infinity;
+    for(const c of [...list.children]){const i=+c.dataset.i;if(i<a||i>=b)c.remove();else{have.add(i);if(i<lo)lo=i}}
+    for(let i=a;i<b;i++){if(have.has(i))continue;const o=byId.get(ids[i]);if(!o)continue;(i<lo?front:back).append(rowNode(o,i))}
+    list.prepend(front);list.append(back);
+  }
+  const more=()=>{if(shown>=ids.length)return;list.append(...ids.slice(shown,shown+BATCH).map(i=>rowNode(byId.get(i))));shown=Math.min(ids.length,shown+BATCH)};
+  const onScroll=()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;paintWin()})};
+  function paintTop(){
+    topNodes.forEach(n=>n.remove());topNodes=[];
+    if(!cfg.top)return;
+    topNodes=[...toFrag(cfg.top(ctx,{all,ids,st})||'').childNodes];list.before(...topNodes);
+  }
+  async function apply(){
+    const t=++tk,term=st.q.trim();let res=[...byId.keys()];
+    if(term)res=cfg.match?await cfg.match(term,{rows:all,byId,ctx}):(n=>res.filter(i=>normalizeAr(cfg.haystack(byId.get(i),ctx)).includes(n)))(normalizeAr(term));
+    if(t!==tk)return;
+    res=res.filter(i=>{const o=byId.get(i);return o&&flt.every(f=>f.test(o,st[f.key],ctx))});
+    const s=srt.find(x=>x[0]===st.sort);
+    if(s&&!(term&&cfg.keepSearchOrder))res.sort((a,b)=>s[2](byId.get(a),byId.get(b),ctx));
+    ids=res;paintTop();emptyEl?.remove();emptyEl=null;list.replaceChildren();list.hidden=false;
+    if(cfg.virtual){w0=w1=-1;list.classList.toggle('virt',ids.length>0);list.style.height=ids.length?ids.length*RH+'px':''}
+    if(!ids.length){const e=toFrag(all.length?cfg.empty.none:cfg.empty.all);if(cfg.emptyIn==='sibling'){list.hidden=true;emptyEl=e.firstElementChild;list.after(emptyEl)}else list.append(e)}
+    else if(cfg.virtual)paintWin(true);else{shown=0;more()}
+    if(cnt&&cfg.count)cnt.textContent=cfg.count({all,shown:ids.length,term,st,ctx});
+  }
+  async function load(){
+    let r;
+    try{r=await cfg.load()}catch(e){list.hidden=false;list.replaceChildren(toFrag(html`<p class="g-err">${e.message}</p>`));return}
+    const t=++tk;all=r.rows;ctx=r.ctx??null;byId=new Map(all.map(x=>[x.id,x]));
+    await cfg.index?.(all,ctx);
+    if(t!==tk)return;
+    apply();
+  }
+  el.addEventListener('input',e=>{if(e.target.matches('[data-q]')){clearTimeout(qt);qt=setTimeout(()=>{st.q=e.target.value;apply()},140)}});
+  el.addEventListener('change',e=>{if(e.target.matches('[data-sort]')){st.sort=e.target.value;apply()}});
+  el.addEventListener('click',e=>{
+    const c=e.target.closest('[data-fk]');if(c){st[c.dataset.fk]=c.dataset.fv;$$(`[data-fk="${c.dataset.fk}"]`,el).forEach(b=>b.setAttribute('aria-pressed',String(b===c)));apply();return}
+    const g=e.target.closest('[data-ft]');if(g){const k=g.dataset.ft;st[k]=!st[k];g.setAttribute('aria-pressed',String(st[k]));apply()}
+  });
+  if(cfg.virtual){addEventListener('scroll',onScroll,{passive:true});addEventListener('resize',onScroll,{passive:true});onDispose(()=>{removeEventListener('scroll',onScroll);removeEventListener('resize',onScroll);cancelAnimationFrame(raf)})}
+  else{if('IntersectionObserver' in window){io=new IntersectionObserver(es=>{if(es.some(x=>x.isIntersecting))more()},{rootMargin:'600px'});io.observe($('[data-sentinel]',el))}onDispose(()=>io?.disconnect())}
+  effect(()=>{(cfg.revs||[]).forEach(s=>repo.rev(s)());load()});
+  el.reload=load;
+  return el;
+}
+
 /* الموظفون */
 VIEWS.staff=function(route){const id=route.params?.id;return id?staffView(id):staffListView()};
 function staffListView(){
@@ -7148,35 +7176,32 @@ function projectView(id){
 
 /* المصروفات التشغيلية */
 VIEWS.expenses=function(){
-  const canW=repo.can('expenses.write');let tk=0,month=monthKey(),rows=[],cats=[];
-  const el=viewShell(html`${modHead('expense','المصروفات','المصاريف التشغيلية والإدارية لكل شهر حسب البند.')}
-    <div class="btn-row rise" style="--i:1">${canW?html`<button type="button" class="btn btn-primary btn-sm" data-x="add">${icon('plus','sm')}<span>مصروف جديد</span></button>`:''}<button type="button" class="btn btn-line btn-sm" data-x="rep">${icon('reports','sm')}<span>تقرير المصروفات</span></button>${repo.can('finance.write')?html`<button type="button" class="btn btn-ghost btn-sm" data-x="cats">${icon('settings','sm')}<span>البنود</span></button>`:''}</div>
-    <section class="sec rise" style="--i:2" data-bind="panel">${skelList(3)}</section>`);
-  const panel=$('[data-bind=panel]',el);
-  async function paint(){
-    const t=++tk;
-    try{[rows,cats]=await Promise.all([repo.list('expenses',{index:'date',query:IDBKeyRange.bound(`${month}-01`,`${month}-31`),pii:'none'}),expCats()]);await Finance.ready()}catch(e){panel.replaceChildren(toFrag(html`<p class="g-err">${e.message}</p>`));return}
-    if(t!==tk)return;
-    rows.sort((a,b)=>String(b.date).localeCompare(a.date)||String(b._hlc).localeCompare(a._hlc));
-    const B=Finance.base,T=sumBy(rows),byCat=groupBy(rows,r=>r.cat).map(([k,g])=>({k,l:optL(cats,k),g,t:sumBy(g)})).sort((a,b)=>b.t.base-a.t.base);
-    panel.replaceChildren(toFrag(html`${monthSwH(month)}
-      <div class="fin-kpis"><div class="fk" data-t="notArrived"><small>مصروف ${monthName(month)}</small><b class="num">${moneyU(T,B)}</b><em><span class="num">${nf.format(rows.length)}</span> قيد</em></div>${byCat.slice(0,3).map(c=>html`<div class="fk"><small>${c.l}</small><b class="num">${moneyU(c.t,B)}</b></div>`)}</div>
-      ${byCat.length?html`<section class="card sec-card"><header><h3>${icon('reports')}حسب البند</h3><small>${curSym(B)}</small></header>${Charts.hbars(byCat.map(c=>({label:c.l,value:round2(c.t.base)})),{fmt:v=>money(v,B)})}</section>`:''}
-      ${rows.length?html`<div class="list">${rows.map(x=>html`<button type="button" class="row" data-xe="${x.id}"${canW?'':raw(' disabled')}><span class="type-ic">${icon(cats.find(c=>c[0]===x.cat)?.[2]||'coins')}</span><span class="r-t"><b>${x.desc||optL(cats,x.cat)}</b><small>${optL(cats,x.cat)} · <span class="num">${x.date}</span>${x.payee?html` · ${x.payee}`:''}${x.invoiceId?html` · فاتورة مرفقة`:''}</small></span><span class="r-end"><b class="num">${money(x.amount,x.currency)}</b></span></button>`)}</div>`
-      :html`<div class="card empty compact">${illustration('expense')}<h4>لا مصروفات في ${monthName(month)}</h4><p>سجّل كل مصروف ببنده وقيمته، مثل 50 شيكلاً مواصلات أو قرطاسية ومطبوعات.</p></div>`}`));
-  }
+  const canW=repo.can('expenses.write');let month=monthKey(),cur=[],cats=[];
+  const el=entityList({
+    sec:true,skel:3,revs:['expenses','settings'],emptyIn:'sibling',
+    head:html`${modHead('expense','المصروفات','المصاريف التشغيلية والإدارية لكل شهر حسب البند.')}<div class="btn-row rise" style="--i:1">${canW?html`<button type="button" class="btn btn-primary btn-sm" data-x="add">${icon('plus','sm')}<span>مصروف جديد</span></button>`:''}<button type="button" class="btn btn-line btn-sm" data-x="rep">${icon('reports','sm')}<span>تقرير المصروفات</span></button>${repo.can('finance.write')?html`<button type="button" class="btn btn-ghost btn-sm" data-x="cats">${icon('settings','sm')}<span>البنود</span></button>`:''}</div>`,
+    load:async()=>{const[rows,c]=await Promise.all([repo.list('expenses',{index:'date',query:IDBKeyRange.bound(`${month}-01`,`${month}-31`),pii:'none'}),expCats()]);await Finance.ready();cur=rows;cats=c;return{rows,ctx:{cats:c}}},
+    sorts:[['date','',(a,b)=>String(b.date).localeCompare(a.date)||String(b._hlc).localeCompare(a._hlc)]],
+    top:({cats},{all})=>{
+      const B=Finance.base,T=sumBy(all),byCat=groupBy(all,r=>r.cat).map(([k,g])=>({k,l:optL(cats,k),g,t:sumBy(g)})).sort((a,b)=>b.t.base-a.t.base);
+      return html`${monthSwH(month)}
+      <div class="fin-kpis"><div class="fk" data-t="notArrived"><small>مصروف ${monthName(month)}</small><b class="num">${moneyU(T,B)}</b><em><span class="num">${nf.format(all.length)}</span> قيد</em></div>${byCat.slice(0,3).map(c=>html`<div class="fk"><small>${c.l}</small><b class="num">${moneyU(c.t,B)}</b></div>`)}</div>
+      ${byCat.length?html`<section class="card sec-card"><header><h3>${icon('reports')}حسب البند</h3><small>${curSym(B)}</small></header>${Charts.hbars(byCat.map(c=>({label:c.l,value:round2(c.t.base)})),{fmt:v=>money(v,B)})}</section>`:''}`;
+    },
+    row:(x,{cats})=>html`<button type="button" class="row" data-xe="${x.id}"${canW?'':raw(' disabled')}><span class="type-ic">${icon(cats.find(c=>c[0]===x.cat)?.[2]||'coins')}</span><span class="r-t"><b>${x.desc||optL(cats,x.cat)}</b><small>${optL(cats,x.cat)} · <span class="num">${x.date}</span>${x.payee?html` · ${x.payee}`:''}${x.invoiceId?html` · فاتورة مرفقة`:''}</small></span><span class="r-end"><b class="num">${money(x.amount,x.currency)}</b></span></button>`,
+    empty:{all:html`<div class="card empty compact">${illustration('expense')}<h4>لا مصروفات في ${monthName(month)}</h4><p>سجّل كل مصروف ببنده وقيمته، مثل 50 شيكلاً مواصلات أو قرطاسية ومطبوعات.</p></div>`}
+  });
   el.addEventListener('click',async e=>{
     const q=x=>e.target.closest(x);let b;
     try{
-      if((b=q('[data-mo]'))){month=monthAdd(month,Number(b.dataset.mo));paint();return}
-      if((b=q('[data-xe]'))){const x=rows.find(r=>r.id===b.dataset.xe);if(x)openExpense(x,cats);return}
+      if((b=q('[data-mo]'))){month=monthAdd(month,Number(b.dataset.mo));el.reload();return}
+      if((b=q('[data-xe]'))){const x=cur.find(r=>r.id===b.dataset.xe);if(x)openExpense(x,cats);return}
       const k=q('[data-x]')?.dataset.x;
       if(k==='add')return openExpense(null,cats.length?cats:await expCats());
       if(k==='cats')return openExpCats();
       if(k==='rep')return openExpReport(month);
     }catch(err){toast(err.message,'error')}
   });
-  effect(()=>{repo.rev('expenses')();repo.rev('settings')();paint()});
   return el;
 };
 const expenseSchema=cats=>({id:'expenses',store:'expenses',noun:'مصروف',savedMsg:'حُفظ المصروف',
