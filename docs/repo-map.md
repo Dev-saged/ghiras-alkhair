@@ -4,7 +4,7 @@ Keep under 5KB. No code. Update by 2 lines after every change.
 
 ## Files
 - `index.html` — كل التطبيق (~7350 سطر، CSS+JS مضمّن): PWA كفالة أيتام، RTL، IndexedDB، مزامنة Firestore REST.
-- `sw.js` service worker · `version.json` إشعار التحديث · `README.md`+صور (svg/jpg) للعرض فقط · `.claude/skills/*` مراجع · `.claude/session-handoff.md` حالة آخر جلسة.
+- `backend/` نسخة مرجعية من قواعد Firestore وWorker المنشورَين (تُنشر يدوياً) · `sw.js` service worker · `version.json` إشعار التحديث · `.claude/skills/*` مراجع · `.claude/session-handoff.md` حالة آخر جلسة.
 
 ## Sections (SECTION markers)
 فواصل `/* ══ N العنوان ══ */` بالعربية؛ المعتمَد نص العنوان لا الرقم (ترقيم فيه فجوات/تكرار قديم غير مُصلَح؛ أسطر JS تقريبية).
@@ -31,8 +31,7 @@ JS(~1124-7350): ثوابت1126·أدوات1152·إشارات1188·حالة1209·
 
 ## Solved bugs (never reintroduce)
 - v1.3.1 صور: `compressImage` يقرأ الملف فوراً ويكشف الصيغة من البايتات (`sniffImage`) ولا يثق بـfile.type؛ HEIC في iframe معزول `heic-frame.html`+`heic2any.min.js` (eval؛ لا تُخفَّف CSP؛ يُضمّان عند التغليف). SW: طلبات iframe لا تُخزَّن كصفحة التطبيق.
-- v1.3.1 تدقيق: كان `audit` محلياً بلا مزامنة. الآن `Cloud.pushAudit`/`cloudApplyAudit` (مجموعة `audit`؛ تحتاج قاعدة: docs/firestore-audit-rules.md). صفوف sync/seed/backup محلية (تجنّب حلقة).
+- v1.3.1 تدقيق: كان `audit` محلياً بلا مزامنة. الآن `Cloud.pushAudit`/`cloudApplyAudit` (مجموعة `audit`؛ القاعدة في backend/firestore.rules؛ صف معيب لا يحجب). صفوف sync/seed/backup محلية (تجنّب حلقة).
 
 ## Open issues
-- ترقيم أقسام JS فيه فجوات وتكرار (١٣،٤١) — للعلم فقط.
 - تعميم schema (مراحل): ✅١ أيتام+مصروفات ✅٢ نسخ احتياطي+كفالات(شهر) ✅٣ تفصيل المتبرعين+سجل المساعدات ✅٤ تفصيل الموظفين/المشاريع+المتابعات ✅٥ حسابات(مستخدمون)+كفالات(دفعي؛ FX وسجل التدقيق يدويان). ✅٦ أيتام(تفصيل) ✅٧ التقارير(emptyC؛ R_ مخطط أصلاً)

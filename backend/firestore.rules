@@ -1,0 +1,113 @@
+rules_version = '2';
+// غراس الخير — قواعد Firestore
+// الرموز المخصّصة يصدرها خادم التوقيع بمطالبات: org · role · oid (لليتيم) · ep (رقم الجلسة)
+// الحقول الحساسة مشفّرة على الأجهزة قبل الرفع؛ السحابة لا ترى إلا نصاً مشفّراً وفهارس عمياء.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function inOrg(o) { return request.auth != null && request.auth.token.org == o; }
+    function live(o) { return get(/databases/$(database)/documents/orgs/$(o)/sessions/$(request.auth.uid)).data.ep == request.auth.token.ep; }
+    function hasRole(o, roles) { return inOrg(o) && request.auth.token.role in roles && live(o); }
+    function staff(o) { return hasRole(o, ['admin', 'officer', 'accountant', 'viewer']); }
+    function writer(o) { return hasRole(o, ['admin', 'officer', 'accountant']); }
+    function fin(o) { return hasRole(o, ['admin', 'accountant']); }
+    function admin(o) { return hasRole(o, ['admin']); }
+    function member(o) { return hasRole(o, ['admin', 'officer', 'accountant', 'viewer', 'orphan']); }
+    function own(o, oid) { return hasRole(o, ['orphan']) && request.auth.token.oid == oid; }
+
+    match /orgs/{o} {
+      // بيانات الدخول والجلسات: خادم التوقيع وحده (حساب الخدمة يتجاوز القواعد)
+      match /creds/{d} { allow read, write: if false; }
+      match /usernames/{d} { allow read, write: if false; }
+      match /sessions/{d} { allow read, write: if false; }
+
+      match /meta/pulse { allow read, write: if member(o); }
+      // المفتاح العام للتسجيل: ينشره مدير النظام ويقرؤه خادم التوقيع
+      match /meta/regkey { allow read: if member(o); allow write: if admin(o); }
+      match /meta/{d} { allow read: if member(o); allow write: if false; }
+
+      // وثيقة لكل يتيم: الملف والكفالات والمساعدات والمتابعات
+      match /orphans/{id} {
+        allow get: if staff(o) || own(o, id);
+        allow list: if staff(o);
+        allow write: if writer(o);
+      }
+      // الصور: فهرس + أجزاء مقطّعة
+      // اليتيم يرفع مرفقات ملفه فقط
+      match /mediaIdx/{id} {
+        allow get: if staff(o) || own(o, resource.data.oid);
+        allow list: if staff(o) || (hasRole(o, ['orphan']) && resource.data.oid == request.auth.token.oid);
+        allow create: if writer(o) || own(o, request.resource.data.oid);
+        allow update: if writer(o) || (own(o, resource.data.oid) && own(o, request.resource.data.oid));
+        allow delete: if writer(o);
+      }
+      match /mediaChunks/{id} {
+        allow get: if staff(o) || own(o, resource.data.oid);
+        allow list: if false;
+        allow create: if writer(o) || own(o, request.resource.data.oid);
+        allow update: if writer(o) || (own(o, resource.data.oid) && own(o, request.resource.data.oid));
+        allow delete: if writer(o);
+      }
+      // تحديث اليتيم الذاتي: وثيقة واحدة لكل يتيم تطبّقها أجهزة الفريق
+      match /selfSubs/{oid} {
+        allow read: if staff(o) || own(o, oid);
+        allow create, update: if own(o, oid) && request.resource.data.oid == oid;
+        allow delete: if admin(o);
+      }
+
+      match /donors/{id} { allow read: if staff(o); allow write: if fin(o); }
+      match /staff/{id} { allow read, write: if fin(o); }
+      match /staffPay/{id} { allow read, write: if fin(o); }
+      match /projects/{id} { allow read: if staff(o); allow write: if writer(o); }
+      match /expenses/{id} { allow read: if hasRole(o, ['admin', 'accountant', 'viewer']); allow write: if fin(o); }
+      match /currencies/{id} { allow read: if member(o); allow write: if fin(o); }
+      match /fxRates/{id} { allow read: if member(o); allow write: if fin(o); }
+      match /aidTypes/{id} { allow read: if member(o); allow write: if writer(o); }
+      match /letterheads/{id} { allow read: if member(o); allow write: if admin(o); }
+      match /programs/{id} { allow read: if staff(o); allow write: if admin(o); }
+      match /tags/{id} { allow read: if staff(o); allow write: if admin(o); }
+      match /settings/{key} {
+        allow read: if member(o);
+        allow write: if admin(o) || (fin(o) && key.matches('finance[.].*')) || (writer(o) && key.matches('rcpt[.:].*'));
+      }
+      // الملفات العامة للمستخدمين يكتبها خادم التوقيع
+      match /users/{id} {
+        allow get: if inOrg(o) && (request.auth.uid == id || admin(o));
+        allow list: if admin(o);
+        allow write: if false;
+      }
+      // طلبات التعديل: اليتيم ينشئ ويتابع طلباته، والمدير يطبّق ويغلق
+      match /changeRequests/{id} {
+        allow get: if staff(o) || own(o, resource.data.oid);
+        allow list: if staff(o) || (hasRole(o, ['orphan']) && resource.data.oid == request.auth.token.oid);
+        allow create: if writer(o) || (own(o, request.resource.data.oid) && request.resource.data.st == 'pending');
+        allow update: if admin(o) || (own(o, resource.data.oid) && resource.data.st == 'pending' && request.resource.data.st == 'pending' && request.resource.data.oid == resource.data.oid);
+        allow delete: if admin(o);
+      }
+      // التسجيل: الرموز المجزّأة وحالة الحجز لخادم التوقيع وحده؛ صور الطلبات مشفّرة بالمفتاح العام للجمعية
+      match /regTokens/{d} { allow read, write: if false; }
+      match /regMedia/{id} {
+        allow get: if hasRole(o, ['admin', 'officer']);
+        allow list, create, update: if false;
+        allow delete: if admin(o);
+      }
+      match /regCodes/{id} { allow read, write: if hasRole(o, ['admin', 'officer']); }
+      match /regRequests/{id} { allow read, write: if hasRole(o, ['admin', 'officer']); }
+      // نسخ السحابة الاحتياطية: مشفّرة بمفتاح بيانات الجمعية على جهاز المدير؛ للمدير وحده
+      match /backups/{id} { allow read, write: if admin(o); }
+      match /backupChunks/{id} { allow get, create, update, delete: if admin(o); allow list: if false; }
+      // سجل التدقيق: كل دور كاتب يرفع صفوف جهازه (الوثيقة = صف واحد، معرّفها = ساعته المنطقية)؛ القراءة للمدير وحده
+      // لا تعديل ولا حذف؛ يُسمح فقط بإعادة رفع الصف نفسه دون تغيير (إعادة محاولة بعد انقطاع)
+      match /audit/{id} {
+        allow read: if admin(o);
+        allow create: if writer(o)
+          && request.resource.data.keys().hasOnly(['d', 'h', 'ts'])
+          && request.resource.data.d is string && request.resource.data.d.size() < 20000
+          && request.resource.data.h is string && request.resource.data.h == id;
+        allow update: if writer(o)
+          && request.resource.data.d == resource.data.d
+          && request.resource.data.h == resource.data.h;
+        allow delete: if false;
+      }
+    }
+  }
+}
