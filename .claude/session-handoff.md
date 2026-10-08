@@ -54,6 +54,10 @@
 - `heic-frame.html` يرسل `ready` والأب ينتظر 8 ث فقط؛ غياب الملفين عند التغليف يعطي رسالة فورية. التغليف بـWebToApp: نوع HTML مع الملفات الأربعة (index.html, sw.js, heic-frame.html, heic2any.min.js) أو نوع Web بعنوان Pages.
 - ملخص شامل للمشروع: `PROJECT_CONTEXT.md` (خارج Git عمداً، يُولَّد عند الطلب).
 
+## إصدار 1.3.3
+- `backend/firestore.rules` = قواعد ساجد المنشورة + كتلة `audit`؛ `backend/ghiras-worker.js` مطابق حرفياً للمنشور (لا حاجة لتعديله). النشر يدوي: Rules في Firebase Console، والـWorker من لوحة Cloudflare.
+- `pushAudit`: دفعة مرفوضة تُعاد صفاً صفاً؛ 3 رفضات متتالية = تأجيل 30 دقيقة. القاعدة لم تُجرَّب على Emulator.
+
 ## لم يُنفَّذ بعد
 - نموذج اليتيم `orphanFormView` ولوحة FX وسجل التدقيق بقيت يدوية عمداً (فريدة الشكل). لا مهام معلّقة من الخطة.
 
