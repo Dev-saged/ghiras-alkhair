@@ -1,1 +1,1 @@
-{"version": "1.3.3", "url": "https://github.com/Dev-saged/ghiras-alkhair/releases/latest", "notes": "رفع سجل التدقيق أكثر متانة (صف معيب لا يحجب البقية)، وقواعد Firestore المحدثة لمجموعة audit، ونسخ الخلفية (Worker وقواعد Firestore) ضمن المستودع", "date": "2026-10-07"}
+{"version": "1.3.4", "url": "https://github.com/Dev-saged/ghiras-alkhair/releases/latest", "notes": "قبول كل صور الأيتام والتسجيل والموظفين والختم: كشف الصيغة بالبايتات، تحويل HEIC عند الحاجة دون ملفات إضافية، وحفظ الأصل بدل الرفض عند تعذّر الفك", "date": "2026-10-08"}
