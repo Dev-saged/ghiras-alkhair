@@ -58,6 +58,11 @@
 - `backend/firestore.rules` = قواعد ساجد المنشورة + كتلة `audit`؛ `backend/ghiras-worker.js` مطابق حرفياً للمنشور (لا حاجة لتعديله). النشر يدوي: Rules في Firebase Console، والـWorker من لوحة Cloudflare.
 - `pushAudit`: دفعة مرفوضة تُعاد صفاً صفاً؛ 3 رفضات متتالية = تأجيل 30 دقيقة. القاعدة لم تُجرَّب على Emulator.
 
+## إصدار 1.3.4
+- الصور بملف واحد: HEIC عبر `Lib.ensure('heic')` (heic2any@0.0.4 من jsdelivr بـSHA-256، كاش في `libs`) و`patchHeic` يزيل 4 مواضع `new Function` في الذاكرة فتعمل داخل iframe `srcdoc` معزول تحت CSP الصارمة. `heic-frame.html` و`heic2any.min.js` حُذفا من المستودع (لا يلزم ضمّهما عند التغليف: `index.html`+`sw.js` فقط).
+- `imgSource` مشترك: compressImage، regCompress (التسجيل)، صورة الموظف، الختم/التوقيع — كانت الثلاثة الأخيرة ترفض MIME فارغاً ولا تكشف الصيغة. `keepRawImage` يحفظ الأصل بدل الرفض (≤6MB؛ التسجيل ≤820KB) والمعاينة الفاشلة تُستبدل بـ`IMG_NA`.
+- اختُبر في Chromium فعلياً: JPG/PNG/WebP/GIF/BMP/AVIF/HEIC (12MP و17MB)/9000×6000/بلا MIME/تالف/فارغ/نص، متصلاً وغير متصل، وكاش المكتبة بعد إعادة التحميل؛ `#/test` 16/16.
+
 ## لم يُنفَّذ بعد
 - نموذج اليتيم `orphanFormView` ولوحة FX وسجل التدقيق بقيت يدوية عمداً (فريدة الشكل). لا مهام معلّقة من الخطة.
 
