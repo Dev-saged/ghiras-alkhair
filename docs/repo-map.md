@@ -27,10 +27,11 @@ JS(~1124-7350): ثوابت1126·أدوات1152·إشارات1188·حالة1209·
 ## Decisions
 - ملف واحد بلا بناء، CSP صارم. IndexedDB: `SCHEMA[]` تراكمي. Firestore REST عبر Worker. صلاحيات: route guard+`capSet`+قواعد Firestore.
 - نماذج staff/projects/expenses/donors أصبحت schema-driven (قسم ٤٥)؛ القوائم/التفصيل/التقارير وaid/followups بقيت كما هي (غير CRUD بسيط).
-- استيراد Excel دفعي بالكود (قسم ٤٦) للمساعدات والكفالات الشهرية، على نمط `orphanImportView` الموجود أصلاً: قالب+دليل أعمدة، معاينة جاهز/خطأ قبل الحفظ، استمرار على الصفوف الصحيحة، تقرير أخطاء قابل للتنزيل. الحفظ الفعلي عبر `Finance.addAid`/`Finance.record` نفسها (دفاع مزدوج، لا تكرار تحقق).
+- استيراد Excel دفعي بالكود (قسم ٤٦): قالب، معاينة، استمرار على الصحيح، تقرير أخطاء؛ الحفظ عبر `Finance.addAid`/`Finance.record`.
 
 ## Solved bugs (never reintroduce)
-- (لا سجل Git لإصلاحات سابقة بعد)
+- v1.3.1 صور: `compressImage` يقرأ الملف فوراً ويكشف الصيغة من البايتات (`sniffImage`) ولا يثق بـfile.type؛ HEIC في iframe معزول `heic-frame.html`+`heic2any.min.js` (eval؛ لا تُخفَّف CSP؛ يُضمّان عند التغليف). SW: طلبات iframe لا تُخزَّن كصفحة التطبيق.
+- v1.3.1 تدقيق: كان `audit` محلياً بلا مزامنة. الآن `Cloud.pushAudit`/`cloudApplyAudit` (مجموعة `audit`؛ تحتاج قاعدة: docs/firestore-audit-rules.md). صفوف sync/seed/backup محلية (تجنّب حلقة).
 
 ## Open issues
 - ترقيم أقسام JS فيه فجوات وتكرار (١٣،٤١) — للعلم فقط.
