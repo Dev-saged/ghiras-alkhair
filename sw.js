@@ -1,4 +1,4 @@
-const V='ghiras-1.3.4',FONTS='ghiras-fonts',PAGE='./index.html';
+const V='ghiras-1.6.0',FONTS='ghiras-fonts',PAGE='./index.html';
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(['./',PAGE])).catch(()=>{}).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('ghiras-')&&k!==V&&k!==FONTS).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
 self.addEventListener('fetch',e=>{const r=e.request;if(r.method!=='GET'||r.cache==='no-store'||r.headers.has('authorization'))return;const u=new URL(r.url);
