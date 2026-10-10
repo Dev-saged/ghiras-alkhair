@@ -1124,7 +1124,7 @@ details.adv[open] summary{margin-block-end:8px}
 <script>
 'use strict';
 /* ══════════ ١ الثوابت ══════════ */
-const APP_VERSION='1.3.4';
+const APP_VERSION='1.4.0';
 // إعداد السحابة الثابت: يتصل كل جهاز تلقائياً
 const CLOUD_PRESET=Object.freeze({project:'ghiras-alkhair',apiKey:'AIzaSyCmVmQHkelH4t6-STrbBr9CXOb14xuEg8c',worker:'https://ghiras-worker.dev-mr07.workers.dev',org:'ghras'});
 const LITE=document.documentElement.dataset.lite==='1';
@@ -1357,11 +1357,11 @@ const emptyC=(ill,h,p)=>html`<div class="card empty compact">${ill?illustration(
 const viewShell=inner=>{const el=document.createElement('div');el.className='view';el.append(toFrag(inner));return el};
 
 function greeting(){const h=new Date().getHours();return h<5?'طابت ليلتكم':h<12?'صباح الخير':'مساء الخير'}
+const MONTHS_AR=Object.freeze(['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر']);
 function dates(){
-  const d=new Date();let g='',hj='';
-  try{g=new Intl.DateTimeFormat('ar-PS-u-nu-latn',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).format(d)}catch{g=d.toLocaleDateString()}
-  try{hj=new Intl.DateTimeFormat('ar-u-ca-islamic-umalqura-nu-latn',{day:'numeric',month:'long',year:'numeric'}).format(d)}catch{hj=''}
-  return{g,hj};
+  const d=new Date();let g='';
+  try{g=`${new Intl.DateTimeFormat('ar-PS-u-nu-latn',{weekday:'long'}).format(d)} ${d.getDate()} ${MONTHS_AR[d.getMonth()]} ${d.getFullYear()}`}catch{g=d.toLocaleDateString()}
+  return{g};
 }
 
 const KPIS=Object.freeze([
@@ -1374,7 +1374,7 @@ const KPIS=Object.freeze([
 const VIEWS={
   dashboard(){
     if(repo.session.peek()?.user.role==='orphan')return portalView();
-    const{g,hj}=dates();const b=APP.brand;
+    const{g}=dates();const b=APP.brand;
     const el=viewShell(html`
     <section class="board-wrap rise" style="--i:0">
       <div class="board">
@@ -1384,7 +1384,7 @@ const VIEWS={
           <p class="eyebrow">${icon('leaf')}<span>${greeting()} · ${g}</span></p>
           <h2>نزرع <span class="glow">الخير</span><br><span class="line2">في كل مكان<svg viewBox="0 0 300 20" preserveAspectRatio="none" aria-hidden="true"><path d="M4 14C70 4 160 2 296 10"/></svg></span></h2>
           <p class="sub">${b.promise}</p>
-          <div class="chips">${hj?html`<span class="chip">${icon('calendar')}<span>${hj}</span></span>`:''}<span class="chip" data-bind="online-chip">${icon('check')}<span>متصل</span></span></div>
+          <div class="chips"><span class="chip" data-bind="online-chip">${icon('check')}<span>متصل</span></span></div>
           <a class="btn btn-leaf b-cta" href="#/orphans">${icon('orphans')}<span>ملف الأيتام</span>${icon('chev','sm mirror')}</a>
         </div>
       </div>
@@ -2963,7 +2963,7 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)idleCheck(
 function deniedView(route){
   return viewShell(html`<div class="card empty rise">${illustration('lock')}<h4>لا تملك صلاحية الوصول</h4><p>قسم «${route.title}» غير متاح لدورك الحالي. تواصل مع مدير النظام لتعديل صلاحياتك.</p><a class="btn btn-ghost" href="#/dashboard">العودة للرئيسية</a></div>`);
 }
-const fmtDate=ts=>{try{return new Intl.DateTimeFormat('ar-PS-u-nu-latn',{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(ts))}catch{return new Date(ts).toLocaleString()}};
+const fmtDate=ts=>{try{const d=new Date(ts);return `${d.getDate()} ${MONTHS_AR[d.getMonth()]} ${d.getFullYear()}، ${new Intl.DateTimeFormat('ar-PS-u-nu-latn',{hour:'numeric',minute:'2-digit'}).format(d)}`}catch{return new Date(ts).toLocaleString()}};
 const fmtSize=b=>b<1024?`${b} B`:b<1048576?`${(b/1024).toFixed(1)} KB`:`${(b/1048576).toFixed(1)} MB`;
 const daysLabel=n=>n===0?'اليوم':n===1?'يوم واحد':n===2?'يومان':n<=10?`${n} أيام`:`${n} يوماً`;
 const auditVal=(f,v)=>{if(v==null||v==='')return '';if(f==='role')return ROLE_LABEL[v]||v;if(f==='active')return v===1||v==='1'||v===true?'نعم':'لا';if(f==='status')return SP_STATUS[v]?.[0]||optLabel('status',v);if(f==='size')return fmtSize(Number(v)||0);const map={kind:{auto:'تلقائية',manual:'يدوية','pre-restore':'قبل الاستعادة'},mode:{merge:'دمج',replace:'استبدال كامل'},reason:{idle:'خمول',manual:'يدوي',version:'تحديث القاعدة'}}[f];return map?.[v]||String(v)};
@@ -3239,7 +3239,7 @@ function portalView(){
   }
   box.addEventListener('change',e=>{const k=e.target.dataset?.sfile;if(k&&e.target.files?.[0]){draft={...draft,...collect()};onFile(k,e.target.files[0]);e.target.value=''}});
   box.addEventListener('click',async e=>{
-    const v=e.target.closest('[data-view]');if(v?.dataset.view){try{const b=await repo.getMedia(v.dataset.view);if(!b)return;const u=URL.createObjectURL(b);urls.push(u);Dlg.open({title:IMG_SPEC[v.dataset.view.split(':')[1]]?.label||'مرفق',body:html`<img class="img-full" src="${u}" alt="">`})}catch(err){toast(err.message,'error')}return}
+    const v=e.target.closest('[data-view]');if(v?.dataset.view){try{await viewMedia(v.dataset.view)}catch(err){toast(err.message,'error')}return}
     const p=e.target.closest('[data-p]')?.dataset.p;if(!p||!data)return;
     if(p==='save'||p==='confirm')return save(p==='confirm');
     if(p==='unlock')Dlg.open({title:'طلب فتح التعديل',body:html`<form class="form" novalidate data-ulr><p class="muted">يصل طلبك إلى الإدارة، وعند الموافقة يُفتح ملفك للتعديل مدة محددة.</p><div class="field"><textarea class="prose" id="ul-${uid()}" name="note" placeholder=" " maxlength="300"></textarea><label>ما الذي تريد تعديله؟</label></div>${errH()}<button class="btn btn-primary" type="submit">${icon('check','sm')}<span>إرسال الطلب</span></button></form>`,
@@ -3619,6 +3619,52 @@ function keepRawImage(file,buf,fmt,max=RAW_IMG_MAX){
 }
 const IMG_NA='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none" stroke="#7d8f84" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="14" y="18" width="68" height="60" rx="10"/><circle cx="35" cy="39" r="6"/><path d="M14 66l20-18 14 12 12-10 22 20"/><path d="M20 84L76 12"/></svg>');
 document.addEventListener('error',e=>{const i=e.target;if(i instanceof HTMLImageElement&&i.src.startsWith('blob:')&&!i.dataset.na){i.dataset.na='1';i.src=IMG_NA}},true);
+
+/* ══════════ تنزيل المرفقات وضغطها ══════════ */
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=u8=>{let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=CRC_T[(c^u8[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0};
+// ZIP بلا ضغط (الصور مضغوطة أصلاً)؛ أسماء UTF-8
+function zipBlob(files){
+  const enc=new TextEncoder(),parts=[],cen=[],d=new Date();
+  const tm=((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&0xFFFF,dt=(((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate())&0xFFFF;
+  let off=0,csz=0;
+  for(const f of files){
+    const nm=enc.encode(f.name),crc=crc32(f.data),sz=f.data.byteLength;
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(10,tm,true);lh.setUint16(12,dt,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,nm.length,true);
+    parts.push(lh.buffer,nm,f.data);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(12,tm,true);ch.setUint16(14,dt,true);ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+    cen.push(ch.buffer,nm);csz+=46+nm.length;off+=30+nm.length+sz;
+  }
+  const end=new DataView(new ArrayBuffer(22));
+  end.setUint32(0,0x06054b50,true);end.setUint16(8,files.length,true);end.setUint16(10,files.length,true);end.setUint32(12,csz,true);end.setUint32(16,off,true);
+  return new Blob([...parts,...cen,end.buffer],{type:'application/zip'});
+}
+const safeFile=s=>String(s??'').replace(/[\\/:*?"<>|\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,80)||'ملف';
+const IMG_EXT=Object.freeze({'image/webp':'webp','image/jpeg':'jpg','image/png':'png','image/gif':'gif','image/avif':'avif','image/bmp':'bmp','image/heic':'heic','image/heif':'heif','image/svg+xml':'svg'});
+const mediaFileName=(kind,blob)=>`${safeFile(IMG_SPEC[kind]?.label||kind)}.${IMG_EXT[blob?.type]||'img'}`;
+// عرض صورة مع زر التنزيل؛ الاسم: نوع المرفق - اسم اليتيم
+async function viewMedia(id){
+  const b=await repo.getMedia(id);if(!b)return;
+  const[oid,kind]=String(id).split(':');let nm='';
+  try{nm=(await repo.get('orphans',oid,{pii:'none'}))?.nameAr||''}catch{}
+  const u=URL.createObjectURL(b),fn=nm?`${IMG_SPEC[kind]?.label||'مرفق'} - ${safeFile(nm)}.${IMG_EXT[b.type]||'img'}`:mediaFileName(kind,b);
+  Dlg.open({title:IMG_SPEC[kind]?.label||'مرفق',body:html`<img class="img-full" src="${u}" alt=""><div class="btn-row" style="margin-block-start:16px"><button type="button" class="btn btn-primary" data-dl>${icon('download')}<span>تنزيل الصورة</span></button></div>`,
+    onMount(el){el.querySelector('[data-dl]').addEventListener('click',()=>{if(!download(fn,b,b.type||'image/webp'))toast('تعذّر التنزيل','error')});$('#dyn-sheet').addEventListener('sheet-closed',()=>URL.revokeObjectURL(u),{once:true})}});
+}
+// كل مرفقات اليتيم في ملف واحد باسمه، وكل صورة باسم نوعها
+async function downloadAllMedia(oid,name){
+  try{
+    const list=(await repo.mediaFor(oid)).filter(m=>IMG_SPEC[m.kind]),files=[];
+    if(!list.length){toast('لا توجد مرفقات للتنزيل','info');return}
+    list.sort((a,b)=>Object.keys(IMG_SPEC).indexOf(a.kind)-Object.keys(IMG_SPEC).indexOf(b.kind));
+    for(const m of list){const b=await repo.getMedia(m.id);if(b)files.push({name:mediaFileName(m.kind,b),data:new Uint8Array(await b.arrayBuffer())})}
+    if(!files.length){toast('لا توجد مرفقات للتنزيل','info');return}
+    if(!download(`${safeFile(name)}.zip`,zipBlob(files),'application/zip'))throw new DataError('تعذّر إنشاء الملف');
+    toast(`نُزّلت ${files.length} مرفقات`,'ok');
+  }catch(e){toast(e.message||'تعذّر التنزيل','error')}
+}
 async function canvasCompress(src,max,mb){
   const d=await decodeImage(src);const k=Math.min(1,max/Math.max(d.w,d.h));
   const c=document.createElement('canvas');c.width=Math.max(1,Math.round(d.w*k));c.height=Math.max(1,Math.round(d.h*k));c.getContext('2d').drawImage(d.img,0,0,c.width,c.height);d.close();
@@ -3847,8 +3893,7 @@ function portraitRing(o,sz=64,{pct=true,cls=''}={}){
   const p=Math.max(0,Math.min(100,Math.round(o?.pct||0))),rr=45,c=2*Math.PI*rr,th=safeThumb(o?.thumb);
   return html`<span class="pring ${cls}" data-tone="${p>=100?'full':p>=60?'mid':'low'}" style="--sz:${sz}px" role="img" aria-label="اكتمال الملف ${p}%"><svg class="ring" viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="${rr}" class="trk"/><circle cx="50" cy="50" r="${rr}" class="val" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${(c*(1-p/100)).toFixed(1)}"/></svg><span class="ph">${th?html`<img src="${th}" alt="" decoding="async">`:html`<b>${initial(o?.nameAr)}</b>`}</span>${pct?html`<span class="pc num">${p}%</span>`:''}</span>`;
 }
-const MONTH_FMT=(()=>{try{return new Intl.DateTimeFormat('ar-PS-u-nu-latn',{month:'long',year:'numeric'})}catch{return null}})();
-const monthName=k=>{const[y,m]=k.split('-').map(Number);return MONTH_FMT?MONTH_FMT.format(new Date(y,m-1,1)):k};
+const monthName=k=>{const[y,m]=String(k).split('-').map(Number);return MONTHS_AR[m-1]?`${MONTHS_AR[m-1]} ${y}`:String(k)};
 function lastMonths(n=12){const out=[];const d=new Date();d.setDate(1);for(let i=n-1;i>=0;i--){const x=new Date(d.getFullYear(),d.getMonth()-i,1);out.push(monthKey(x))}return out}
 function monthStates(sps){
   const by=new Map();for(const s of sps){const p=by.get(s.month);if(!p||s.rev>p.rev)by.set(s.month,s)}
@@ -3962,7 +4007,7 @@ function orphanProfileView(id){
         (fin||repo.can('donors.read'))&&{icon:'sponsor',title:'الحساب والكفالة',small:w?html`إصدار المحفظة <span class="num">${w.version}</span>`:'',body:html`<div class="kv">
         ${fin?html`${kvRow('نوع الحساب',optLabel('walletType',o.walletType||w?.type))}${kvRow('البنك / المحفظة',o.provider||w?.provider)}${kvRow('رقم الحساب',html`<span class="num">${w?.number||'—'}</span>`,{reveal:w?.number&&repo.can('pii.wallet')?'wallets:'+w.id+':number':null})}${kvRow('صاحب الحساب',o.holderName||w?.holderName)}`:''}
         ${kvRow('المتبرع المرسل',d?.name)}</div><div data-bind="links"></div>${repo.can('donors.write')?html`<div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-link-add>${icon('link','sm')}<span>ربط متبرع</span></button></div>`:''}`},
-        {icon:'image',title:'المرفقات',small:'مشفّرة على الجهاز',body:html`<div class="media-grid">${Object.entries(IMG_SPEC).filter(([k])=>mediaNeed(o).includes(k)||media.some(x=>x.kind===k)).map(([k,sp])=>{const m=media.find(x=>x.kind===k);return html`<div class="m-tile"><button type="button" class="m-ph${m?' has':''}" data-view="${m?m.id:''}" ${m?'':raw('disabled')}>${icon(sp.icon)}<span>${m?'':'لا يوجد'}</span></button><b>${sp.label}</b><p class="m-st">${m?html`<span class="num">${fmtSize(m.size)}</span>`:''}</p></div>`})}</div>`},
+        {icon:'image',title:'المرفقات',small:'مشفّرة على الجهاز',head:media.length?html`<button type="button" class="btn btn-line btn-sm" data-dlmedia>${icon('download','sm')}<span>تحميل الكل</span></button>`:'',body:html`<div class="media-grid">${Object.entries(IMG_SPEC).filter(([k])=>mediaNeed(o).includes(k)||media.some(x=>x.kind===k)).map(([k,sp])=>{const m=media.find(x=>x.kind===k);return html`<div class="m-tile"><button type="button" class="m-ph${m?' has':''}" data-view="${m?m.id:''}" ${m?'':raw('disabled')}>${icon(sp.icon)}<span>${m?'':'لا يوجد'}</span></button><b>${sp.label}</b><p class="m-st">${m?html`<span class="num">${fmtSize(m.size)}</span>`:''}</p></div>`})}</div>`},
         repo.can('aid.read')&&{icon:'aid',title:'المساعدات',head:repo.can('aid.write')?html`<button type="button" class="btn btn-line btn-sm" data-aid-add>${icon('plus','sm')}<span>تسليم</span></button>`:'',body:html`<div data-bind="aid"><div class="skel" style="height:48px"></div></div>`},
         {icon:'followups',title:'المتابعات',head:repo.can('followups.write')?html`<button type="button" class="btn btn-line btn-sm" data-fu-add>${icon('plus','sm')}<span>متابعة</span></button>`:'',body:html`<div data-bind="fu"><div class="skel" style="height:48px"></div></div>`},
         (admin||acc)&&{icon:'key',title:'حساب اليتيم',head:html`<span class="chip ${!o.selfLock?'warn':selfEditable(o)?'info':'ok'}">${!o.selfLock?'لم يؤكّد ملفه بعد':selfEditable(o)?'مفتوح للتعديل':'مؤكَّد ومقفل'}</span>`,body:html`
@@ -3987,7 +4032,8 @@ function orphanProfileView(id){
     onClick:async(e,o,c)=>{
       const q=s=>e.target.closest(s);let n;
       if((n=q('[data-reveal]'))){const[s,k,f]=n.dataset.reveal.split(':');const v=await repo.reveal(s,k,f);const b=n.parentElement.querySelector('[data-rv-val]');if(b)b.textContent=v||'—';n.remove();return}
-      if((n=q('[data-view]'))&&n.dataset.view){const b=await repo.getMedia(n.dataset.view);if(!b)return;const u=URL.createObjectURL(b);urls.push(u);Dlg.open({title:IMG_SPEC[n.dataset.view.split(':')[1]]?.label||'مرفق',body:html`<img class="img-full" src="${u}" alt="">`});return}
+      if((n=q('[data-view]'))&&n.dataset.view){await viewMedia(n.dataset.view);return}
+      if(q('[data-dlmedia]')){await downloadAllMedia(id,o.nameAr);return}
       if(q('[data-fu-add]'))return openFuAdd(id);
       if(q('[data-aid-add]'))return openAidAdd(id);
       if((n=q('[data-sp-open]'))){const[oid,m]=n.dataset.spOpen.split('|');return openSpSheet(oid,m)}
@@ -4507,7 +4553,6 @@ const VEIN_P=['M60 380C120 250 210 140 360 30','M110 290C90 240 90 190 104 150M1
 let veinPaths=null,leafPath=null;
 function veins(x,X,Y,size,color,alpha,rot=0){veinPaths??=VEIN_P.map(p=>new Path2D(p));x.save();x.translate(X,Y);x.rotate(rot);x.scale(size/400,size/400);x.strokeStyle=color;x.globalAlpha=alpha;x.lineWidth=2.4;x.lineCap='round';veinPaths.forEach(p=>x.stroke(p));x.restore()}
 function leaf(x,X,Y,s,c){leafPath??=new Path2D('M5 19C5 10.5 10.5 5 19 5c0 8.5-5.5 14-14 14Z');x.save();x.translate(X,Y);x.scale(s/24,s/24);x.fillStyle=c;x.fill(leafPath);x.strokeStyle='rgba(255,255,255,.55)';x.lineWidth=1.4;x.beginPath();x.moveTo(6,18);x.lineTo(14,10);x.stroke();x.restore()}
-function mark(x,X,Y,ok,c){x.save();x.strokeStyle=c;x.lineWidth=2;x.lineCap='round';x.lineJoin='round';x.beginPath();if(ok){x.moveTo(X-5,Y);x.lineTo(X-1.5,Y+3.5);x.lineTo(X+5,Y-3.5)}else{x.moveTo(X-4,Y-4);x.lineTo(X+4,Y+4);x.moveTo(X+4,Y-4);x.lineTo(X-4,Y+4)}x.stroke();x.restore()}
 function drawLogo(x,l,img,X,Y,S,C){
   if(img){const k=Math.min(S/img.width,S/img.height),w=img.width*k,h=img.height*k;x.drawImage(img,X+(S-w)/2,Y+(S-h)/2,w,h);return}
   const g=x.createLinearGradient(X,Y,X+S,Y+S);g.addColorStop(0,C.accent);g.addColorStop(1,C.primary);rr(x,X,Y,S,S,S*.28);x.fillStyle=g;x.fill();
@@ -4628,10 +4673,20 @@ async function drawCard(D,l){
         y+=n*22+28+26;lines=lines.slice(n);
       }
     }else if(sec.att){
-      if(y+22+60>FOOT)cont();
-      secHead(title());cardBg(52);let X=R-16;
-      for(const t of sec.att){const f_=fnt(500,12),w=tw(x,t.l,f_)+40;rr(x,X-w,y+11,w,30,15);x.fillStyle=t.ok?rgba(C.accent,.14):'rgba(0,0,0,.04)';x.fill();mark(x,X-14,y+26,t.ok,t.ok?C.accent:'#b0463c');tx(x,t.l,X-26,y+27,{f:f_,c:t.ok?ink:MUTED,d:'rtl'});X-=w+8}
-      y+=52+26;
+      const aw=(inner-16)/2,items=sec.att.map(t=>{const k=Math.min((aw-16)/t.w,300/t.h),dw=t.w*k,dh=t.h*k;return{...t,dw,dh,bh:dh+16,h:24+dh+16}});
+      let rows=[];for(let i=0;i<items.length;i+=2){const cs=items.slice(i,i+2);rows.push({cs,h:Math.max(...cs.map(c=>c.h))+14})}
+      while(rows.length){
+        if(y+22+16+rows[0].h+16>FOOT)cont();
+        secHead(title());let hs=16,n=0;while(n<rows.length&&y+hs+rows[n].h+16<=FOOT){hs+=rows[n].h;n++}
+        cardBg(hs+4);let yy=y+16;
+        rows.slice(0,n).forEach(row=>{row.cs.forEach((c,i)=>{
+          const X0=R-16-aw-i*(aw+16);
+          tx(x,c.l,X0+aw-2,yy+10,{f:fnt(600,12),c:ink,d:'rtl',max:aw-4});
+          rr(x,X0,yy+24,aw,c.bh,12);x.fillStyle='#ffffff';x.fill();x.strokeStyle=rgba(C.primary,.14);x.lineWidth=.9;x.stroke();
+          x.save();rr(x,X0+(aw-c.dw)/2,yy+32,c.dw,c.dh,6);x.clip();x.drawImage(c.img,X0+(aw-c.dw)/2,yy+32,c.dw,c.dh);x.restore();
+        });yy+=row.h});
+        y+=hs+4+26;rows=rows.slice(n);
+      }
     }
   }
   pages.forEach((p,i)=>{const q=p.x;q.fillStyle=rgba(C.gold,.55);q.fillRect(M,H-54,CW,.8);
@@ -4650,7 +4705,7 @@ function cardSections(D){
     if(rows.length)out.push({title,rows});
   }
   for(const k of ['story','needs','notes'])if(v[k])out.push({title:OF[k].l,para:v[k]});
-  out.push({title:'المرفقات',att:Object.entries(IMG_SPEC).filter(([k])=>mediaNeed(o).includes(k)||D.media.some(m=>m.kind===k)).map(([k,sp])=>({l:sp.label,ok:D.media.some(m=>m.kind===k)}))});
+  if(D.atts?.length)out.push({title:'المرفقات',att:D.atts});
   return out;
 }
 async function drawLhPreview(l,w=420,h=132){
@@ -4683,7 +4738,12 @@ async function cardData(id,{sensitive=false,cache={}}={}){
   }
   let portrait=null;const pm=media.find(m=>m.kind==='portrait');
   if(pm){try{const b=await repo.getMedia(pm.id);portrait=b?(await decodeImage(b)).img:null}catch{portrait=null}}
-  return{o,v,media,portrait,vc:await vcode(['card',o.id,o.code,o._hlc||''])};
+  const atts=[];
+  for(const[k,sp] of Object.entries(IMG_SPEC)){
+    const m=k==='portrait'?null:media.find(z=>z.kind===k);if(!m)continue;
+    try{const b=await repo.getMedia(m.id);if(!b)continue;const d=await decodeImage(b);atts.push({l:sp.label,img:d.img,w:d.w,h:d.h,close:d.close})}catch{}
+  }
+  return{o,v,media,portrait,atts,vc:await vcode(['card',o.id,o.code,o._hlc||''])};
 }
 async function docOut(mode,pages,{wMm,hMm,name,title}){
   if(mode==='print')return printPages(pages,wMm,hMm);
@@ -5618,7 +5678,7 @@ function answerChips(s){
 /* ══════════ ٣٦ الرسوم البيانية والتصدير ══════════ */
 const niceMax=v=>{if(!(v>0))return 1;const p=10**Math.floor(Math.log10(v));for(const m of [1,1.5,2,2.5,3,4,5,6,8,10])if(m*p>=v)return m*p;return 10*p};
 const compact=v=>{const a=Math.abs(v);return a>=1e6?nf2.format(round2(v/1e6))+'M':a>=1e4?nf2.format(Math.round(v/100)/10)+'K':nf.format(Math.round(v))};
-const MSH=Object.freeze(['ك2','شباط','آذار','نيسان','أيار','حزيران','تموز','آب','أيلول','ت1','ت2','ك1']);
+const MSH=Object.freeze(['ينا','فبر','مار','أبر','ماي','يون','يول','أغس','سبت','أكت','نوف','ديس']);
 const MONTH_SHORT=k=>MSH[Number(String(k).slice(5,7))-1]||k;
 const Charts={
   // أعمدة زمنية: الأقدم يميناً
@@ -7542,6 +7602,10 @@ VIEWS.test=function(){
     let nz=false;try{await imgSource(new File(['hello'],'a.txt',{type:'text/plain'}))}catch(e){nz=e instanceof DataError}
     let big=false;try{keepRawImage({size:1},{byteLength:RAW_IMG_MAX+1},'png')}catch(e){big=e instanceof DataError}
     return a.fmt==='png'&&b.src.size===50&&nz&&big&&keepRawImage({size:50},png.buffer,'png').size===png.length});
+  t('ZIP: توقيع ونهاية السجل وCRC واسم عربي',async()=>{
+    const z=zipBlob([{name:'صورة شخصية.png',data:te.encode('123456789')}]),u=new DataView(await z.arrayBuffer()),n=te.encode('صورة شخصية.png').length;
+    return u.getUint32(0,true)===0x04034b50&&u.getUint32(14,true)===0xCBF43926&&u.getUint16(6,true)===0x0800&&u.getUint32(u.byteLength-22,true)===0x06054b50&&u.getUint16(u.byteLength-12,true)===1&&n>0&&safeFile('a/b:c')==='a b c'});
+  t('أسماء الأشهر ميلادية',()=>monthName('2026-10')==='أكتوبر 2026'&&monthName('2026-03').startsWith('مارس')&&MONTHS_AR.length===12);
   (async()=>{
     let pass=0;const rows=[];
     for(const[name,fn] of T){let ok=false,err='';try{ok=!!(await fn())}catch(e){err=e.message||String(e)}if(ok)pass++;rows.push(html`<div class="row"><span class="r-t"><b>${name}</b>${err?html`<small>${err}</small>`:''}</span><span class="r-end"><span class="chip ${ok?'ok':'bad'}">${ok?'سليم':'فشل'}</span></span></div>`)}
