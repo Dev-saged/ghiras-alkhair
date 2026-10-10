@@ -31,6 +31,8 @@ JS(~1124-7350): ثوابت1126·أدوات1152·إشارات1188·حالة1209·
 
 - v1.4.0 مرفقات: `zipBlob` (ZIP بلا ضغط، CRC32، أسماء UTF-8) و`viewMedia`/`downloadAllMedia`/`mediaFileName` بعد `IMG_NA`؛ زر `data-dlmedia` في قسم مرفقات ملف اليتيم؛ `cardData` يعيد `atts` (صور مفكوكة) و`drawCard` يرسمها شبكة بعناوين. الأشهر: `MONTHS_AR` و`monthName` (لا Intl للأشهر؛ التاريخ الهجري أُزيل).
 
+- v1.5.0 فواتير: قسم «فواتير وتصدير جماعي» قبل ٤٥: `invItems`/`invReport`/`invJobs`/`invRender` (تقرير R يمر عبر `drawReport` و`exportXlsx(R,name,out)`)، `runBatch` (تتابع، ZIP ≤`BATCH_MAX`=40، إيقاف)، `openInvoiceDlg`/`openCardsDlg` وزر `data-bulk` عام. كشف اليتيم: حالة `part` وأشهر `recs` الموجودة فقط.
+
 ## Solved bugs (never reintroduce)
 - v1.3.1 صور: `compressImage` يقرأ الملف فوراً ويكشف الصيغة من البايتات (`sniffImage`) ولا يثق بـfile.type؛ HEIC (v1.3.4) بلا ملفات إضافية: `Lib.ensure('heic')` (jsdelivr+SHA، كاش libs) ثم `patchHeic` يزيل new Function فيعمل في iframe srcdoc تحت CSP الصارمة (لا تُخفَّف). `imgSource` مشترك لـcompressImage/regCompress/صورة الموظف/الختم؛ `keepRawImage` يحفظ الأصل بدل الرفض (≤6MB، التسجيل ≤820KB) وIMG_NA معاينة بديلة. SW: طلبات iframe لا تُخزَّن كصفحة التطبيق.
 - v1.3.1 تدقيق: كان `audit` محلياً بلا مزامنة. الآن `Cloud.pushAudit`/`cloudApplyAudit` (مجموعة `audit`؛ القاعدة في backend/firestore.rules؛ صف معيب لا يحجب). صفوف sync/seed/backup محلية (تجنّب حلقة).

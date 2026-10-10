@@ -1124,7 +1124,7 @@ details.adv[open] summary{margin-block-end:8px}
 <script>
 'use strict';
 /* ══════════ ١ الثوابت ══════════ */
-const APP_VERSION='1.4.0';
+const APP_VERSION='1.5.0';
 // إعداد السحابة الثابت: يتصل كل جهاز تلقائياً
 const CLOUD_PRESET=Object.freeze({project:'ghiras-alkhair',apiKey:'AIzaSyCmVmQHkelH4t6-STrbBr9CXOb14xuEg8c',worker:'https://ghiras-worker.dev-mr07.workers.dev',org:'ghras'});
 const LITE=document.documentElement.dataset.lite==='1';
@@ -3931,7 +3931,7 @@ function orphanListView(){
   return entityList({
     virtual:true,skel:6,revs:['orphans'],keepSearchOrder:true,
     head:html`<div class="o-head rise" style="--i:0"><div><h2>الأيتام</h2><p class="muted" data-bind="count">جارٍ التحميل…</p></div>
-    ${canW?html`<div class="btn-row"><a class="btn btn-line btn-sm" href="#/orphans/import">${icon('upload','sm')}<span>استيراد</span></a><a class="btn btn-primary btn-sm" href="#/orphans/new">${icon('plus','sm')}<span>يتيم جديد</span></a></div>`:''}</div>`,
+    <div class="btn-row"><button type="button" class="btn btn-line btn-sm" data-bulk="cards">${icon('card','sm')}<span>بطاقات الجميع</span></button>${canW?html`<a class="btn btn-line btn-sm" href="#/orphans/import">${icon('upload','sm')}<span>استيراد</span></a><a class="btn btn-primary btn-sm" href="#/orphans/new">${icon('plus','sm')}<span>يتيم جديد</span></a>`:''}</div></div>`,
     search:{placeholder:'الاسم، الرمز، رقم الهوية أو الهاتف'},
     filters:[{key:'status',options:[['all','الكل'],...OPTS.status],test:(o,v)=>v==='all'||o.status===v},{key:'inc',type:'toggle',label:'غير مكتمل',test:(o,on)=>!on||(o.pct||0)<100}],
     sorts:[['code','الرمز',byCode],['name','الاسم',(x,y)=>col.compare(x.nameAr||'',y.nameAr||'')],['recent','الأحدث',(x,y)=>String(y._hlc).localeCompare(String(x._hlc))],['pct','الأقل اكتمالاً',(x,y)=>(x.pct||0)-(y.pct||0)]],
@@ -3990,7 +3990,7 @@ function orphanProfileView(id){
     chips:(o,{a})=>[html`<span class="chip num">OR${o.code}</span>`,a?html`<span class="chip">${ageLabel(a)}</span>`:'',o.status?html`<span class="chip ${o.status==='active'?'ok':o.status==='suspended'?'bad':'warn'}">${optLabel('status',o.status)}</span>`:'',o.region?html`<span class="chip">${o.region}</span>`:'',o.lossType?html`<span class="chip">${optLabel('lossType',o.lossType)}</span>`:'',o.approvedBy?html`<span class="chip stamp" title="${o.approvedAt?fmtDate(o.approvedAt):''}">${icon('check','sm')}<span>معتمد من ${o.approvedBy}</span></span>`:''],
     actions:o=>{const wa=o.whatsapp||o.contactPhone;return[repo.can('orphans.write')&&{href:`#/orphans/${o.id}/edit`,icon:'edit',label:'تعديل',cls:'btn-primary btn-sm'},
       wa&&{href:safeUrl('https://wa.me/'+wa),ext:1,icon:'chat',label:'واتساب'},o.contactPhone&&{href:safeUrl('tel:+'+o.contactPhone),icon:'phone',label:'اتصال'},
-      {k:'card',icon:'card',label:'البطاقة'},repo.can('finance.read')&&repo.can('reports.read')&&{href:`#/reports/o:${o.id}`,icon:'receipt',label:'كشف حساب'},
+      {k:'card',icon:'card',label:'البطاقة'},repo.can('finance.read')&&repo.can('reports.read')&&{href:`#/reports/o:${o.id}`,icon:'receipt',label:'كشف حساب'},(repo.can('finance.read')||repo.can('aid.read'))&&{k:'inv',icon:'doc',label:'فاتورة'},
       repo.can('orphans.delete')&&{k:'del',icon:'trash',cls:'btn-ghost btn-icon',aria:'حذف'}]},
     heroExtra:(o,c)=>c.miss.length?html`<p class="miss-note">ناقص لاكتمال الملف: ${c.miss.map(fieldLabel).join('، ')}</p>`:'',
     mid:(o,c)=>repo.can('finance.read')?html`<div class="grid-2 rise" style="--i:1"><section class="card sec-card"><header><h3>${icon('leaf')}نمو الكفالة</h3><small>آخر 12 شهراً</small></header>${growthRing(c.months)}</section>
@@ -4027,6 +4027,7 @@ function orphanProfileView(id){
     },
     on:{
       card:()=>openDoc('card',id),
+      inv:()=>openInvoiceDlg({scope:'orphan',id}),
       del:async()=>{if(!(await Dlg.confirm({title:'حذف ملف اليتيم؟',text:'ينتقل الملف إلى سلة المحذوفات ويمكن استعادته خلال 30 يوماً.',ok:'حذف',danger:true})))return;await repo.remove('orphans',id);location.hash='#/orphans';toast('نُقل الملف إلى السلة','ok',6000,{label:'تراجع',fn:async()=>{try{await repo.restore('orphans:'+id);location.hash='#/orphans/'+id}catch(err){toast(err.message,'error')}}})}
     },
     onClick:async(e,o,c)=>{
@@ -4839,7 +4840,7 @@ async function openSpSheet(orphanId,month){
   Dlg.open({title:`كفالة ${monthName(month)}`,body:html`<div class="imp">
     <div class="row" style="padding:0">${portraitRing(o,52,{pct:false})}<span class="r-t"><b>${o.nameAr}</b><small><span class="num">OR${o.code}</span>${!last&&def.src==='link'?' · مُعبّأ من رابط الكفالة':!last&&def.src==='implicit'?' · مُعبّأ من ملف اليتيم':''}</small></span>${last?html`<span class="chip ${stCls(spStatus(last.status))}">${SP_STATUS[last.status]?.[0]||''}</span>`:''}</div>
     ${last?html`<div class="card" style="padding:14px 16px;display:grid;gap:8px"><div class="r-t" style="display:grid"><b class="num" style="font-size:var(--fs-500)">${money(last.amount,last.currency)}</b><small class="muted">مراجعة <span class="num">${last.rev}</span> · ${last.recordedBy?.name||'—'} · ${relTime(last._at||Date.now())}${last.donorId&&dn.get(last.donorId)?html` · ${dn.get(last.donorId)}`:''}</small></div><p class="eqv${Finance.convert(last)?.rated?'':' bad'}">${eqvH(Finance.convert(last))}</p>
-      <div class="btn-row">${spStatus(last.status)==='received'?html`<button type="button" class="btn btn-line btn-sm" data-rcpt="${last.id}">${icon('receipt','sm')}<span>الإيصال</span></button>`:''}${last.noticeId?html`<button type="button" class="btn btn-line btn-sm" data-notice="${last.noticeId}">${icon('image','sm')}<span>الإشعار</span></button>`:''}</div></div>`:''}
+      <div class="btn-row">${spStatus(last.status)==='received'?html`<button type="button" class="btn btn-line btn-sm" data-rcpt="${last.id}">${icon('receipt','sm')}<span>الإيصال</span></button><button type="button" class="btn btn-line btn-sm" data-inv-m>${icon('doc','sm')}<span>فاتورة</span></button>`:''}${last.noticeId?html`<button type="button" class="btn btn-line btn-sm" data-notice="${last.noticeId}">${icon('image','sm')}<span>الإشعار</span></button>`:''}</div></div>`:''}
     ${canW?html`<form class="form" data-sp-form novalidate>
       <div class="chips-row" role="radiogroup" aria-label="الحالة">${SP_KEYS.map(k=>html`<button type="button" class="chip-btn" role="radio" data-st="${k}" aria-pressed="${String(st===k)}" aria-checked="${String(st===k)}">${SP_STATUS[k][0]}</button>`)}</div>
       <div class="form-grid">
@@ -4864,6 +4865,7 @@ async function openSpSheet(orphanId,month){
       const q=s=>e.target.closest(s);let n;
       if((n=q('[data-st]'))){st=n.dataset.st;$$('[data-st]',b).forEach(x=>{x.setAttribute('aria-pressed',String(x===n));x.setAttribute('aria-checked',String(x===n))});if(st==='received'&&!f.elements.receivedDate.value)f.elements.receivedDate.value=localDate()>monthEnd(month)?monthEnd(month):localDate();eqv();return}
       if((n=q('[data-rcpt]')))return openDoc('receipt',n.dataset.rcpt);
+      if(q('[data-inv-m]'))return openInvoiceDlg({scope:'orphan',id:orphanId,month});
       if((n=q('[data-notice]'))){try{const bl=await repo.getMedia(n.dataset.notice);if(!bl)throw new DataError('الإشعار غير متاح');const u=URL.createObjectURL(bl);Dlg.open({title:`إشعار ${monthName(month)} — ${o.nameAr}`,body:html`<div class="imp"><img class="img-full" src="${u}" alt="الإشعار"><button type="button" class="btn btn-ghost" data-back>${icon('chev','flip sm')}<span>رجوع للكفالة</span></button></div>`,onMount(x){$('#dyn-sheet').addEventListener('sheet-closed',()=>URL.revokeObjectURL(u),{once:true});$('[data-back]',x).addEventListener('click',()=>{URL.revokeObjectURL(u);openSpSheet(orphanId,month)})}})}catch(err){toast(err.message,'error')}}
     });
     if(!f)return;
@@ -5371,7 +5373,7 @@ function openDonorEdit(d=null){
 VIEWS.donors=function(route){const id=route.params?.id;return id?donorView(id):donorListView()};
 function donorListView(){
   const canW=repo.can('donors.write'),fin=repo.can('finance.read');let tk=0,term='',qt=0,rows=[];
-  const el=viewShell(html`<div class="o-head rise" style="--i:0"><div><h2>المتبرعون</h2><p class="muted" data-bind="cnt">جارٍ التحميل…</p></div>${canW?html`<div class="btn-row"><button type="button" class="btn btn-primary btn-sm" data-donor-add>${icon('plus','sm')}<span>متبرع جديد</span></button></div>`:''}</div>
+  const el=viewShell(html`<div class="o-head rise" style="--i:0"><div><h2>المتبرعون</h2><p class="muted" data-bind="cnt">جارٍ التحميل…</p></div><div class="btn-row">${fin||repo.can('aid.read')?html`<button type="button" class="btn btn-line btn-sm" data-bulk="inv">${icon('doc','sm')}<span>فواتير الجميع</span></button>`:''}${canW?html`<button type="button" class="btn btn-primary btn-sm" data-donor-add>${icon('plus','sm')}<span>متبرع جديد</span></button>`:''}</div></div>
     <div class="toolbar rise" style="--i:1"><label class="search">${icon('search')}<input type="search" data-q placeholder="الاسم أو الهاتف أو البلد" autocomplete="off" aria-label="بحث"></label></div>
     <div class="rise" style="--i:2" data-bind="list">${skelList(5)}</div>`);
   const box=$('[data-bind=list]',el);
@@ -5411,7 +5413,7 @@ function donorView(id){
     name:d=>d.name,
     chips:d=>[html`<span class="chip">${optLabel2(DONOR_KIND,d.kind)||'متبرع'}</span>`,d.country?html`<span class="chip">${d.country}</span>`:'',d.active===0?html`<span class="chip bad">متوقف</span>`:html`<span class="chip ok">نشط</span>`],
     actions:d=>[canW&&{k:'edit',icon:'edit',label:'تعديل',cls:'btn-primary btn-sm'},canW&&{k:'link',icon:'link',label:'ربط يتيم'},
-      fin&&repo.can('reports.read')&&{href:`#/reports/d:${id}`,icon:'receipt',label:'كشف حساب'},
+      fin&&repo.can('reports.read')&&{href:`#/reports/d:${id}`,icon:'receipt',label:'كشف حساب'},(fin||repo.can('aid.read'))&&{k:'inv',icon:'doc',label:'فاتورة'},
       d.phone&&{href:safeUrl('https://wa.me/'+d.phone.replace(/\D/g,'')),ext:1,icon:'chat',label:'واتساب'},d.email&&{href:safeUrl('mailto:'+d.email),icon:'at',label:'بريد'},
       repo.can('donors.delete')&&{k:'del',icon:'trash',cls:'btn-ghost btn-icon',aria:'حذف'}],
     kpis:(d,c)=>[{label:'الأيتام المكفولون',value:nf.format(c.linked.size+c.implicit.length),sub:html`روابط نشطة <span class="num">${c.ls.filter(l=>l.active).length}</span>`},
@@ -5423,7 +5425,7 @@ function donorView(id){
       fin&&{icon:'sponsor',title:'سجل الكفالات',small:'آخر 24 سجلاً',body:c.sps.length?html`<div class="list">${c.sps.slice(0,24).map(s=>{const o=c.on.get(s.orphanId),k=spStatus(s.status);return html`<button type="button" class="sp-row" data-sp-open="${s.orphanId}|${s.month}"><span class="r-ic">${icon('calendar')}</span><span class="r-t"><b>${monthName(s.month)} — ${o?.nameAr||'—'}</b><small><span class="num">OR${o?.code||s.orphanCode||''}</span>${s.receivedDate?html` · <span class="num">${s.receivedDate}</span>`:''}</small></span><span class="amt"><b class="num">${money(s.amount,s.currency)}</b><span class="chip ${SP_STATUS[k]?.[1]||''}">${SP_STATUS[k]?.[0]||''}</span></span></button>`})}</div>`:html`<p class="muted">لا سجلات كفالة بعد.</p>`},
       d.note&&{icon:'doc',title:'ملاحظات',body:html`<p style="white-space:pre-wrap">${d.note}</p>`}],
     del:{store:'donors',to:'#/donors',title:'حذف المتبرع؟',text:'يُنقل إلى سلة المحذوفات؛ سجلات الكفالة السابقة تبقى كما هي.'},
-    on:{edit:d=>openDonorEdit(d),link:()=>openLinkEditor({donorId:id})},
+    on:{edit:d=>openDonorEdit(d),link:()=>openLinkEditor({donorId:id}),inv:()=>openInvoiceDlg({scope:'donor',id})},
     onClick:e=>{const n=e.target.closest('[data-link-edit]');if(n)return openLinkEditor({linkId:n.dataset.linkEdit});const sp=e.target.closest('[data-sp-open]');if(sp){const[oid,m]=sp.dataset.spOpen.split('|');return openSpSheet(oid,m)}}
   });
 }
@@ -5611,7 +5613,7 @@ function createAnalytics(r,F=Finance){
 const Analytics=createAnalytics(repo);
 
 /* ══════════ ٣٥ الاستعلام الذكي: محلل عربي قائم على القواعد ══════════ */
-const RDEF=()=>({type:'stats',preset:6,from:'',to:'',region:'',status:'',loss:'',gender:'',ageMin:null,ageMax:null,code:'',q:'',donorId:'',typeId:'',n:10,metric:'sponsorship',target:'orphans',over:2,alert:'',subject:'',text:''});
+const RDEF=()=>({type:'stats',preset:6,from:'',to:'',region:'',status:'',loss:'',gender:'',ageMin:null,ageMax:null,code:'',q:'',donorId:'',typeId:'',n:10,metric:'sponsorship',part:'all',target:'orphans',over:2,alert:'',subject:'',text:''});
 const QP=(()=>{
   const MN=[['يناير','كانون الثاني'],['فبراير','شباط'],['مارس','اذار'],['ابريل','نيسان'],['مايو','ايار'],['يونيو','حزيران'],['يوليو','تموز'],['اغسطس','اب'],['سبتمبر','ايلول'],['اكتوبر','تشرين الاول'],['نوفمبر','تشرين الثاني'],['ديسمبر','كانون الاول']].map(a=>a.map(normalizeAr));
   const NW={واحد:1,شهر:1,اثنين:2,اثنان:2,شهرين:2,شهران:2,ثلاث:3,ثلاثه:3,اربع:4,اربعه:4,خمس:5,خمسه:5,ست:6,سته:6,سبع:7,سبعه:7,ثمان:8,ثمانيه:8,تسع:9,تسعه:9,عشر:10,عشره:10,عشرين:20,خمسين:50};
@@ -5757,7 +5759,7 @@ function xlsxInWorker(code,p){
     w.postMessage(p);
   });
 }
-async function exportXlsx(R,name){
+async function exportXlsx(R,name,out=download){
   const lh=await defaultLh(),C=lhColors(lh),argb=h=>'FF'+h.slice(1).toUpperCase(),org=lh.org||APP.name,stamp=`${R.sub||''} · أُصدر ${localDate()}`;
   const used=new Set(),sheetName=s=>{let b=String(s||'ورقة').replace(/[\[\]:*?\/\\]/g,' ').slice(0,28).trim()||'ورقة',n=b,i=2;while(used.has(n))n=`${b} ${i++}`;used.add(n);return n};
   const sheets=[...(R.stats?.length?[{title:'الملخص',cols:[{l:'البند',xw:34},{l:'القيمة',xw:28}],rows:R.stats.map(([a,b])=>[a,b])}]:[]),...R.sections];
@@ -5767,10 +5769,10 @@ async function exportXlsx(R,name){
       sheets:sheets.map(s=>({name:sheetName(s.sheet||s.title),title:s.title,cols:s.cols.map(c=>({l:c.l,t:c.t,xw:c.xw,w:c.w})),rows:s.rows,foot:s.foot||null}))};
     let blob=null;
     try{blob=await xlsxInWorker(rec.code,p)}catch{if(await Lib.load('xlsx').catch(()=>false)&&globalThis.ExcelJS)blob=await xlsxMake(globalThis.ExcelJS,p)}
-    if(blob){if(!download(name,blob,XLSX_MIME))throw new DataError('تعذّر تنزيل الملف');return 'lib'}
+    if(blob){if(!out(name,blob,XLSX_MIME))throw new DataError('تعذّر تنزيل الملف');return 'lib'}
   }
   const blob=Xlsx.write(sheets.map(s=>({name:sheetName(s.sheet||s.title),rows:[[`${org} — ${R.title}`],[stamp],[],s.cols.map(c=>c.l),...s.rows.map(r_=>r_.map(v=>v??'')),...(s.foot?[s.foot.map(v=>v??'')]:[])],widths:s.cols.map(c=>c.xw||Math.max(10,Math.round((c.w||.15)*110)))})));
-  if(!download(name,blob,XLSX_MIME))throw new DataError('تعذّر تنزيل الملف');
+  if(!out(name,blob,XLSX_MIME))throw new DataError('تعذّر تنزيل الملف');
   return 'builtin';
 }
 function fitTxt(x,s,maxW,f){s=String(s??'');x.save();x.font=f;if(x.measureText(s).width<=maxW){x.restore();return s}let a=0,b=s.length;while(a<b){const m=(a+b+1)>>1;if(x.measureText(s.slice(0,m)+'…').width<=maxW)a=m;else b=m-1}x.restore();return s.slice(0,a)+'…'}
@@ -5895,15 +5897,15 @@ VIEWS.reports=function(route){
       const[kind,id]=s.subject.split(':');
       if(kind==='o'){
         const T=Analytics.orphanStatement(S,id,R);if(!T)return{ans:'اليتيم غير موجود',html:emptyC('','غير موجود')};
-        const o=T.o,d=S.dById.get(o.donorId);
-        current={title:`كشف حساب يتيم — OR${o.code}`,sub:rangeLabel(R),filters:`${o.nameAr} · ${o.region||''}${o.guardianName?` · الوصي ${o.guardianName}`:''}${d?` · المتبرع ${d.name}`:''}`,stats:[['أشهر مستلمة',nf.format(T.rows.filter(x=>x.st==='received').length)],['المستلم الموحّد',money(T.recv.base,B())],['الصافي',money(T.recv.net,B())],['أشهر فائتة',nf.format(T.missed)],...(S.aidR?[['المساعدات',nf.format(T.aid.length)],['قيمة المساعدات',money(T.aidT.base,B())]]:[])],
-          sections:[...(S.fin?[{title:'الكفالة الشهرية',cols:[{l:'الشهر',w:.17},{l:'الحالة',w:.13},{l:'المبلغ',w:.11},{l:'العملة',w:.08},{l:`المعادل (${B()})`,w:.13},{l:`الصافي (${B()})`,w:.12},{l:'تاريخ الاستلام',w:.13,ltr:1},{l:'رقم العملية',w:.13,ltr:1}],rows:T.rows.map(x=>[monthName(x.m),SP_STATUS[x.st]?.[0]||'بلا سجل',x.s?Number(x.s.amount):null,x.s?.currency||'',x.c?.rated?x.c.value:null,x.c?.rated?x.c.net:null,x.s?.receivedDate||'',x.s?.txnNo||'']),foot:['الإجمالي المستلم',null,null,null,T.recv.base,T.recv.net,null,null]}]:[]),
-            ...(S.aidR?[{title:'المساعدات',cols:[{l:'التاريخ',w:.15,ltr:1},{l:'النوع',w:.25},{l:'الكمية',w:.12},{l:'القيمة',w:.14},{l:'المصدر',w:.34}],rows:T.aid.map(a=>[a.date,S.tById.get(a.typeId)?.name||a.typeName||'',a.qty?`${nf2.format(a.qty)} ${a.unit||''}`:'',a.value!=null?money(a.value,a.currency):'',[S.dById.get(a.donorId)?.name,a.source].filter(Boolean).join(' · ')])}]:[])]};
+        const o=T.o,d=S.dById.get(o.donorId),both=S.fin&&S.aidR,part=both?s.part:S.fin?'sp':'aid',showSp=S.fin&&part!=='aid',showAid=S.aidR&&part!=='sp',recs=T.rows.filter(x=>x.s);
+        current={title:`كشف حساب يتيم — OR${o.code}`,sub:rangeLabel(R),filters:`${o.nameAr} · ${o.region||''}${o.guardianName?` · الوصي ${o.guardianName}`:''}${d?` · المتبرع ${d.name}`:''}`,stats:[...(showSp?[['أشهر مستلمة',nf.format(T.rows.filter(x=>x.st==='received').length)],['المستلم الموحّد',money(T.recv.base,B())],['الصافي',money(T.recv.net,B())],['أشهر فائتة',nf.format(T.missed)]]:[]),...(showAid?[['المساعدات',nf.format(T.aid.length)],['قيمة المساعدات',money(T.aidT.base,B())]]:[])],
+          sections:[...(showSp&&recs.length?[{title:'الكفالة الشهرية',cols:[{l:'الشهر',w:.17},{l:'الحالة',w:.13},{l:'المبلغ',w:.11},{l:'العملة',w:.08},{l:`المعادل (${B()})`,w:.13},{l:`الصافي (${B()})`,w:.12},{l:'تاريخ الاستلام',w:.13,ltr:1},{l:'رقم العملية',w:.13,ltr:1}],rows:recs.map(x=>[monthName(x.m),SP_STATUS[x.st]?.[0]||'',x.s?Number(x.s.amount):null,x.s?.currency||'',x.c?.rated?x.c.value:null,x.c?.rated?x.c.net:null,x.s?.receivedDate||'',x.s?.txnNo||'']),foot:['الإجمالي المستلم',null,null,null,T.recv.base,T.recv.net,null,null]}]:[]),
+            ...(showAid&&T.aid.length?[{title:'المساعدات',cols:[{l:'التاريخ',w:.15,ltr:1},{l:'النوع',w:.25},{l:'الكمية',w:.12},{l:'القيمة',w:.14},{l:'المصدر',w:.34}],rows:T.aid.map(a=>[a.date,S.tById.get(a.typeId)?.name||a.typeName||'',a.qty?`${nf2.format(a.qty)} ${a.unit||''}`:'',a.value!=null?money(a.value,a.currency):'',[S.dById.get(a.donorId)?.name,a.source].filter(Boolean).join(' · ')])}]:[])]};
         return{ans:`كشف ${o.nameAr} (OR${o.code}) — ${rangeLabel(R)}: المستلم ${moneyU(T.recv,B())}${T.missed?` · ${cAr(T.missed,W_.m)} بلا استلام`:''}`,html:html`${head(`كشف حساب — ${o.nameAr}`,rangeLabel(R))}
           <div class="row card" style="padding:12px 16px">${oCell(o)}<span class="r-end"><a class="btn btn-ghost btn-sm" href="#/orphans/${o.id}">${icon('orphans','sm')}<span>الملف</span></a><button type="button" class="btn btn-ghost btn-sm" data-subj="">${icon('swap','sm')}<span>تغيير</span></button></span></div>
-          ${kpiH([['المستلم',money(T.recv.base,B()),`الصافي ${money(T.recv.net,B())}`],['أشهر فائتة',nf.format(T.missed),'ضمن الفترة',T.missed?'notArrived':''],...(S.aidR?[['المساعدات',nf.format(T.aid.length),money(T.aidT.base,B()),'review']]:[])])}${unratedH(T.recv.unrated)}
-          ${S.fin?html`<div class="list">${T.rows.slice().reverse().map(x=>html`<button type="button" class="sp-row" data-sp-open="${o.id}|${x.m}"><span class="r-ic">${icon('calendar')}</span><span class="r-t"><b>${monthName(x.m)}</b><small>${x.s?.receivedDate?html`<span class="num">${x.s.receivedDate}</span>`:''}${x.s?.txnNo?html` · <span class="num">${x.s.txnNo}</span>`:''}</small></span><span class="amt">${x.s?html`<b class="num">${money(x.s.amount,x.s.currency)}</b>`:x.exp?html`<small class="muted num">متوقع ${money(x.exp.amount,x.exp.currency)}</small>`:''}<span class="chip ${SP_STATUS[x.st]?.[1]||''}">${SP_STATUS[x.st]?.[0]||'بلا سجل'}</span></span></button>`)}</div>`:''}
-          ${S.aidR&&T.aid.length?html`<section class="card sec-card"><header><h3>${icon('aid')}المساعدات</h3></header><div class="list">${T.aid.map(a=>html`<div class="row"><span class="type-ic">${icon(S.tById.get(a.typeId)?.icon||'aid')}</span><span class="r-t"><b>${S.tById.get(a.typeId)?.name||a.typeName||''}</b><small><span class="num">${a.date}</span>${a.value!=null?html` · <span class="num">${money(a.value,a.currency)}</span>`:''}</small></span></div>`)}</div></section>`:''}`};
+          ${both?html`<div class="chips-row">${[['all','الكل'],['sp','الكفالات'],['aid','المساعدات']].map(([k,l])=>html`<button type="button" class="chip-btn" data-part="${k}" aria-pressed="${String(part===k)}"><span>${l}</span></button>`)}</div>`:''}${kpiH([...(showSp?[['المستلم',money(T.recv.base,B()),`الصافي ${money(T.recv.net,B())}`],['أشهر فائتة',nf.format(T.missed),'ضمن الفترة',T.missed?'notArrived':'']]:[]),...(showAid?[['المساعدات',nf.format(T.aid.length),money(T.aidT.base,B()),'review']]:[])])}${showSp?unratedH(T.recv.unrated):''}
+          ${showSp?html`<div class="list">${recs.slice().reverse().map(x=>html`<button type="button" class="sp-row" data-sp-open="${o.id}|${x.m}"><span class="r-ic">${icon('calendar')}</span><span class="r-t"><b>${monthName(x.m)}</b><small>${x.s?.receivedDate?html`<span class="num">${x.s.receivedDate}</span>`:''}${x.s?.txnNo?html` · <span class="num">${x.s.txnNo}</span>`:''}</small></span><span class="amt"><b class="num">${money(x.s.amount,x.s.currency)}</b><span class="chip ${SP_STATUS[x.st]?.[1]||''}">${SP_STATUS[x.st]?.[0]||''}</span></span></button>`)}</div>`:''}
+          ${showAid&&T.aid.length?html`<section class="card sec-card"><header><h3>${icon('aid')}المساعدات</h3></header><div class="list">${T.aid.map(a=>html`<div class="row"><span class="type-ic">${icon(S.tById.get(a.typeId)?.icon||'aid')}</span><span class="r-t"><b>${S.tById.get(a.typeId)?.name||a.typeName||''}</b><small><span class="num">${a.date}</span>${a.value!=null?html` · <span class="num">${money(a.value,a.currency)}</span>`:''}</small></span></div>`)}</div></section>`:''}`};
       }
       const T=Analytics.donorStatement(S,id,R);if(!T)return{ans:'المتبرع غير موجود',html:emptyC('','غير موجود')};
       const recv=T.sp.filter(x=>Analytics.ok(x));
@@ -5965,6 +5967,7 @@ VIEWS.reports=function(route){
     if((n=q('[data-over]'))){set({over:clamp(st.peek().over+Number(n.dataset.over),1,24)});return}
     if((n=q('[data-topn]'))){set({n:Number(n.dataset.topn)});return}
     if((n=q('[data-metric]'))){set({metric:n.dataset.metric});return}
+    if((n=q('[data-part]'))){set({part:n.dataset.part});return}
     if((n=q('[data-target]'))){set({target:n.dataset.target});return}
     if((n=q('[data-subj]'))){set({subject:n.dataset.subj});return}
     if((n=q('[data-al]'))){set({alert:st.peek().alert===n.dataset.al?'':n.dataset.al});return}
@@ -7025,6 +7028,148 @@ function reportOut(R,name){
     onMount(b){b.addEventListener('click',async e=>{const k=e.target.closest('[data-ro]')?.dataset.ro;if(!k)return;try{if(k==='pdf'){Dlg.close();await openDoc('report',{R,name:`${name}.pdf`})}else{await exportXlsx(R,`${name}.xlsx`);toast('تم تجهيز ملف Excel','ok')}}catch(err){$('[data-err]',b).textContent=err.message}})}});
 }
 
+/* ══════════ فواتير الكفالات والمساعدات وتصدير جماعي ══════════ */
+const BATCH_MAX=40;
+const invPeriods=()=>[['m0','هذا الشهر'],['m1','الشهر الماضي'],['m3','آخر 3 أشهر'],['m6','آخر 6 أشهر'],['m12','آخر 12 شهراً'],['y','هذه السنة'],['x','فترة محددة']];
+function invRange(k,from,to){
+  const m=monthKey();
+  if(k==='x'){if(!MONTH_RX.test(from||'')||!MONTH_RX.test(to||''))throw new DataError('حدّد شهر البداية والنهاية');if(from>to)throw new DataError('شهر البداية بعد شهر النهاية');return{from,to}}
+  return k==='m0'?{from:m,to:m}:k==='m1'?{from:monthAdd(m,-1),to:monthAdd(m,-1)}:k==='y'?{from:`${m.slice(0,4)}-01`,to:m}:rangeOf(Number(k.slice(1))||1);
+}
+// المستلم من الكفالات فقط (مثل الإيصال) وكل المساعدات ضمن الفترة
+function invItems(S,{donorId,orphanId,R,part}){
+  const inR=m=>m>=R.from&&m<=R.to,mine=x=>(!donorId||x.donorId===donorId)&&(!orphanId||x.orphanId===orphanId);
+  return{
+    sp:part==='aid'||!S.fin?[]:S.recs.filter(s=>Analytics.ok(s)&&inR(s.month)&&mine(s)),
+    aid:part==='sp'||!S.aidR?[]:S.aid.filter(a=>inR(String(a.date).slice(0,7))&&mine(a))
+  };
+}
+function invReport(S,{d,o,R,part,sp,aid,mode}){
+  const F=Finance,B=F.base,oc=id=>S.oById.get(id),bc=(a,b)=>byCode(oc(a)||{},oc(b)||{});
+  sp=[...sp].sort((a,b)=>a.month.localeCompare(b.month)||bc(a.orphanId,b.orphanId));
+  aid=[...aid].sort((a,b)=>String(a.date).localeCompare(String(b.date))||bc(a.orphanId,b.orphanId));
+  const code=id=>oc(id)?`OR${oc(id).code}`:'',nm=id=>oc(id)?.nameAr||'',vAid=aid.filter(a=>a.value!=null),ts=F.totals(sp),ta=F.totals(vAid.map(aidRec));
+  const kids=[...new Set([...sp,...aid].map(x=>x.orphanId))].sort(bc),sections=[];
+  if(mode==='donor'&&kids.length>1)sections.push({title:'ملخص حسب اليتيم',cols:[{l:'الرمز',w:.14,ltr:1},{l:'اليتيم',w:.38},{l:`الكفالات (${B})`,w:.16},{l:`المساعدات (${B})`,w:.16},{l:`الإجمالي (${B})`,w:.16}],
+    rows:kids.map(k=>{const a=F.totals(sp.filter(s=>s.orphanId===k)).base,b=F.totals(vAid.filter(x=>x.orphanId===k).map(aidRec)).base;return[code(k),nm(k),a,b,round2(a+b)]}),foot:['الإجمالي',null,ts.base,ta.base,round2(ts.base+ta.base)]});
+  if(sp.length)sections.push({title:'الكفالات',cols:[{l:'الشهر',w:.14},{l:'الرمز',w:.09,ltr:1},{l:'اليتيم',w:.22},{l:'المبلغ',w:.11},{l:'العملة',w:.08},{l:`المعادل (${B})`,w:.14},{l:'تاريخ الاستلام',w:.12,ltr:1},{l:'رقم العملية',w:.1,ltr:1}],
+    rows:sp.map(s=>{const c=F.convert(s);return[monthName(s.month),code(s.orphanId),nm(s.orphanId),Number(s.amount),s.currency,c?.rated?c.value:null,s.receivedDate||'',s.txnNo||'']}),foot:['الإجمالي',null,null,null,null,ts.base,null,null]});
+  if(aid.length)sections.push({title:'المساعدات',cols:[{l:'التاريخ',w:.13,ltr:1},{l:'الرمز',w:.09,ltr:1},{l:'اليتيم',w:.2},{l:'النوع',w:.18},{l:'الكمية',w:.12},{l:'القيمة',w:.14},{l:'المصدر',w:.14}],
+    rows:aid.map(a=>[a.date,code(a.orphanId),nm(a.orphanId),S.tById.get(a.typeId)?.name||a.typeName||'',a.qty?`${nf2.format(a.qty)} ${a.unit||''}`.trim():'',a.value!=null?money(a.value,a.currency):'',a.source||'']),foot:vAid.length?['الإجمالي',null,null,null,null,moneyU(ta,B),null]:null});
+  const names=d?[d.name]:[...new Set([...sp,...aid].map(x=>S.dById.get(x.donorId)?.name).filter(Boolean))];
+  return{title:`فاتورة — ${mode==='donor'?d.name:o?.nameAr||''}`,sub:rangeLabel(R),
+    filters:[o&&mode!=='donor'?`اليتيم: ${o.nameAr} (OR${o.code})`:'',names.length?`الكفيل: ${names.join('، ')}`:'',d?.country].filter(Boolean).join(' · '),
+    stats:[['عدد الأيتام',nf.format(kids.length)],...(sp.length?[['كفالات',nf.format(sp.length)],['إجمالي الكفالات',moneyU(ts,B)]]:[]),...(aid.length?[['مساعدات',nf.format(aid.length)],['قيمة المساعدات',moneyU(ta,B)]]:[]),['الإجمالي',moneyU({base:round2(ts.base+ta.base),unrated:Object.entries(ta.unrated).reduce((m,[c,v])=>(m[c]=round2((m[c]||0)+v),m),{...ts.unrated})},B)]],sections};
+}
+// مهام الفواتير: [{name,R}] وملف ZIP يجمعها عند تعدّدها
+function invJobs(S,{scope,id,R,part,style}){
+  const per=rangeLabel(R),out=[],dn=x=>S.dById.get(x),on=x=>S.oById.get(x),mOf=a=>String(a.date).slice(0,7);
+  const eachMonth=(it,d)=>{
+    const keys=new Map();for(const s of it.sp)keys.set(s.orphanId+'|'+s.month,[s.orphanId,s.month]);for(const a of it.aid)keys.set(a.orphanId+'|'+mOf(a),[a.orphanId,mOf(a)]);
+    [...keys.values()].sort((x,y)=>byCode(on(x[0])||{},on(y[0])||{})||x[1].localeCompare(y[1])).forEach(([oid,m])=>{
+      const sub={sp:it.sp.filter(s=>s.orphanId===oid&&s.month===m),aid:it.aid.filter(a=>a.orphanId===oid&&mOf(a)===m)},o=on(oid),dd=d||dn(sub.sp[0]?.donorId||sub.aid[0]?.donorId)||dn(o?.donorId)||null;
+      out.push({name:`${o?.nameAr||oid} - ${monthName(m)}`,R:invReport(S,{d:dd,o,R:{from:m,to:m},part,...sub,mode:'month'})});
+    });
+  };
+  const forDonor=d=>{
+    const it=invItems(S,{donorId:d.id,R,part});if(!it.sp.length&&!it.aid.length)return;
+    if(style!=='each')out.push({name:`${d.name} - ${per}`,R:invReport(S,{d,R,part,...it,mode:'donor'})});
+    if(style!=='whole')eachMonth(it,d);
+  };
+  let zip='';
+  if(scope==='donor'){const d=dn(id);if(!d)throw new DataError('الكفيل غير موجود');zip=`${d.name} - فواتير`;forDonor(d)}
+  else if(scope==='orphan'){
+    const o=on(id);if(!o)throw new DataError('اليتيم غير موجود');zip=`${o.nameAr} - فواتير`;
+    const it=invItems(S,{orphanId:id,R,part});
+    if(it.sp.length||it.aid.length){
+      if(style!=='each')out.push({name:`${o.nameAr} - ${per}`,R:invReport(S,{d:dn(it.sp[0]?.donorId||it.aid[0]?.donorId)||dn(o.donorId)||null,o,R,part,...it,mode:'orphan'})});
+      if(style!=='whole')eachMonth(it,null);
+    }
+  }else{zip=`فواتير الكفلاء - ${per}`;[...S.donors].sort((a,b)=>String(a.name).localeCompare(String(b.name),'ar')).forEach(forDonor)}
+  return{jobs:out,zip};
+}
+async function invRender(R,fmt,ctx){
+  if(fmt==='xlsx'){let b=null;await exportXlsx(R,'',(n,bl)=>{b=bl;return true});return b}
+  const vc=await vcode(['invoice',R.title,R.sub,R.filters,...R.sections.map(x=>`${x.title}:${x.rows.length}:${JSON.stringify(x.foot||'')}`)]);
+  const pages=await drawReport(R,ctx.lh,vc,ctx.seal);
+  try{return await Pdf.fromCanvases(pages,{title:R.title,wMm:210,hMm:297})}finally{pages.forEach(c=>{c.width=c.height=1})}
+}
+// تنفيذ دفعة ملفات بالتتابع: ملف واحد يُنزَّل مباشرة، وأكثر يُجمَّع في ZIP (حتى 40 ملفاً للملف) مع تقدّم وإيقاف
+async function runBatch(jobs,{zip,run,onProgress}){
+  const buf=[],used=new Set(),failed=[],nZip=Math.ceil(jobs.length/BATCH_MAX);let zn=0,done=0;
+  const uniq=n=>{let k=n,i=2;while(used.has(k))k=n.replace(/(\.[^.]+)$/,` (${i++})$1`);used.add(k);return k};
+  const flush=()=>{if(!buf.length)return;const parts=buf.splice(0);zn++;if(!download(`${safeFile(zip)}${nZip>1?` (${zn})`:''}.zip`,zipBlob(parts),'application/zip'))throw new DataError('تعذّر تنزيل الملف')};
+  for(const j of jobs){
+    if(run.stop)break;
+    onProgress?.(done,jobs.length);
+    try{
+      const blob=await j.make(),fn=uniq(`${safeFile(j.name)}.${j.ext}`);
+      if(jobs.length===1){if(!download(fn,blob,j.mime))throw new DataError('تعذّر تنزيل الملف');done++;break}
+      buf.push({name:fn,data:new Uint8Array(await blob.arrayBuffer())});if(buf.length>=BATCH_MAX)flush();
+    }catch(e){if(e instanceof DataError&&jobs.length===1)throw e;failed.push(j.name)}
+    done++;await new Promise(r=>setTimeout(r));
+  }
+  flush();
+  return{done:done-failed.length,failed,stopped:run.stop,zips:zn};
+}
+const batchMsg=r=>`${r.stopped?'أُوقف التنفيذ؛ ':''}تم تجهيز ${nf.format(r.done)} ملف${r.zips>1?` في ${r.zips} ملفات مضغوطة`:''}${r.failed.length?` · تعذّر ${nf.format(r.failed.length)}`:''}`;
+const chipsH=(g,opts,cur)=>html`<div class="chips-row" style="flex-wrap:wrap" role="radiogroup" data-g="${g}">${opts.map(([k,l])=>html`<button type="button" class="chip-btn" role="radio" data-k="${k}" aria-pressed="${String(cur===k)}" aria-checked="${String(cur===k)}">${l}</button>`)}</div>`;
+function bindBatchDlg(b,st,go){
+  const run={stop:false},stEl=$('[data-st]',b),goB=$('[data-go]',b),stopB=$('[data-stop]',b),err=$('[data-err]',b);
+  $('#dyn-sheet').addEventListener('sheet-closed',()=>{run.stop=true},{once:true});
+  b.addEventListener('click',async e=>{
+    const c=e.target.closest('.chip-btn[data-k]');
+    if(c&&!goB.disabled){const g=c.parentElement.dataset.g;st[g]=c.dataset.k;[...c.parentElement.children].forEach(x=>{const on=x===c;x.setAttribute('aria-pressed',String(on));x.setAttribute('aria-checked',String(on))});const x=$('[data-x]',b);if(x)x.hidden=st.per!=='x';return}
+    if(e.target.closest('[data-stop]')){run.stop=true;stopB.disabled=true;return}
+    if(!e.target.closest('[data-go]'))return;
+    err.textContent='';run.stop=false;goB.disabled=true;stopB.hidden=false;stopB.disabled=false;
+    try{const r=await go(run,(i,n)=>{stEl.textContent=`جارٍ التجهيز: ${nf.format(i+1)} من ${nf.format(n)}…`});stEl.textContent=batchMsg(r);toast(batchMsg(r),r.failed.length?'info':'ok',5000)}
+    catch(ex){stEl.textContent='';err.textContent=ex.message||'تعذّر التنفيذ'}
+    finally{goB.disabled=false;stopB.hidden=true}
+  });
+}
+function openInvoiceDlg({scope='donor',id='',month=''}={}){
+  if(!repo.can('finance.read')&&!repo.can('aid.read'))return toast('لا تملك صلاحية الاطلاع على الكفالات أو المساعدات','error');
+  const pm=monthAdd(monthKey(),-1),st={per:month?'x':'m1',part:'all',style:month?'whole':'both',fmt:'pdf'},one=scope==='orphan';
+  Dlg.open({title:scope==='allDonors'?'فواتير جميع الكفلاء':one?'فاتورة اليتيم':'فاتورة الكفيل',body:html`<div class="imp">
+    <p class="muted">الفترة</p>${chipsH('per',invPeriods(),st.per)}
+    <div class="form-grid" data-x${st.per==='x'?'':raw(' hidden')}>${dateH('from','من شهر',month||pm,'month')}${dateH('to','إلى شهر',month||pm,'month')}</div>
+    <p class="muted">المحتوى</p>${chipsH('part',[['all','كفالات ومساعدات'],['sp','كفالات فقط'],['aid','مساعدات فقط']],st.part)}
+    <p class="muted">الشكل</p>${chipsH('style',[['whole',one?'ملف شامل لليتيم':'ملف شامل لكل كفيل'],['each','فاتورة لكل يتيم وشهر'],['both','الاثنان']],st.style)}
+    <p class="muted">الصيغة</p>${chipsH('fmt',[['pdf','PDF'],['xlsx','Excel'],['both','الاثنان']],st.fmt)}
+    <p class="muted" data-st aria-live="polite"></p>${errH()}
+    <div class="btn-row"><button type="button" class="btn btn-primary" data-go>${icon('download','sm')}<span>إنشاء وتنزيل</span></button><button type="button" class="btn btn-line" data-stop hidden>إيقاف</button></div></div>`,
+  onMount(b){bindBatchDlg(b,st,async(run,prog)=>{
+    const R=invRange(st.per,$('[name=from]',b).value,$('[name=to]',b).value),S=await Analytics.load(),{jobs,zip}=invJobs(S,{scope,id,R,part:st.part,style:st.style});
+    if(!jobs.length)throw new DataError('لا توجد كفالات مستلمة أو مساعدات ضمن هذه الفترة');
+    const lh=await defaultLh(),seal=await sealImgs().catch(()=>null),ctx={lh,seal},fm=st.fmt==='both'?['pdf','xlsx']:[st.fmt];
+    const all=jobs.flatMap(j=>fm.map(f=>({name:j.name,ext:f,mime:f==='pdf'?'application/pdf':XLSX_MIME,make:()=>invRender(j.R,f,ctx)})));
+    return runBatch(all,{zip,run,onProgress:prog});
+  })}});
+}
+// بطاقات كل الأيتام: ملف PDF لكل يتيم باسمه
+function openCardsDlg(){
+  const st={scope:'active'};
+  Dlg.open({title:'بطاقات جميع الأيتام',body:html`<div class="imp">
+    <p class="muted">من تُصدَر بطاقاتهم</p>${chipsH('scope',[['active','النشطون فقط'],['all','الكل']],st.scope)}
+    <p class="muted">كل بطاقة ملف PDF باسم اليتيم، وتُجمَّع في ملفات مضغوطة (حتى ${nf.format(BATCH_MAX)} بطاقة للملف) لحماية ذاكرة الجهاز. البيانات الحساسة تبقى مخفية.</p>
+    <p class="muted" data-st aria-live="polite"></p>${errH()}
+    <div class="btn-row"><button type="button" class="btn btn-primary" data-go>${icon('download','sm')}<span>إنشاء وتنزيل</span></button><button type="button" class="btn btn-line" data-stop hidden>إيقاف</button></div></div>`,
+  onMount(b){bindBatchDlg(b,st,async(run,prog)=>{
+    const os=(await repo.list('orphans',{pii:'none'})).filter(o=>st.scope==='all'||(o.status||'active')==='active').sort(byCode);
+    if(!os.length)throw new DataError('لا أيتام ضمن الاختيار');
+    const lh=await defaultLh();
+    return runBatch(os.map(o=>({name:o.nameAr||`OR${o.code}`,ext:'pdf',mime:'application/pdf',make:async()=>{
+      const D=await cardData(o.id);
+      try{const pages=await drawCard(D,lh);try{return await Pdf.fromCanvases(pages,{title:`بطاقة ${o.nameAr}`,wMm:210,hMm:297})}finally{pages.forEach(c=>{c.width=c.height=1})}}
+      finally{D.atts?.forEach(a=>a.close?.());D.portrait?.close?.()}}})),{zip:'بطاقات الأيتام',run,onProgress:prog});
+  })}});
+}
+document.addEventListener('click',e=>{
+  const n=e.target.closest('[data-bulk]');if(!n)return;e.preventDefault();
+  try{n.dataset.bulk==='cards'?openCardsDlg():openInvoiceDlg({scope:'allDonors'})}catch(err){toast(err.message,'error')}
+});
+
 /* ══════════ ٤٥ محرك الوحدات: حقول نموذج من schema ══════════ */
 // تغطي فقط نموذج الإضافة/التعديل (لا القوائم ولا التفصيل)؛ القوائم وتقارير PDF/Excel وخصائص كل وحدة الخاصة تبقى كما هي عبر extra
 const FieldKinds={
@@ -7605,6 +7750,7 @@ VIEWS.test=function(){
   t('ZIP: توقيع ونهاية السجل وCRC واسم عربي',async()=>{
     const z=zipBlob([{name:'صورة شخصية.png',data:te.encode('123456789')}]),u=new DataView(await z.arrayBuffer()),n=te.encode('صورة شخصية.png').length;
     return u.getUint32(0,true)===0x04034b50&&u.getUint32(14,true)===0xCBF43926&&u.getUint16(6,true)===0x0800&&u.getUint32(u.byteLength-22,true)===0x06054b50&&u.getUint16(u.byteLength-12,true)===1&&n>0&&safeFile('a/b:c')==='a b c'});
+  t('فترة الفواتير: الإعدادات الجاهزة والمخصصة والمقلوبة',()=>{let bad=false;try{invRange('x','2026-03','2026-01')}catch{bad=true}const r=invRange('m3');return bad&&invRange('x','2026-01','2026-03').to==='2026-03'&&monthsBetween(r.from,r.to).length===3&&invRange('m0').from===monthKey()});
   t('أسماء الأشهر ميلادية',()=>monthName('2026-10')==='أكتوبر 2026'&&monthName('2026-03').startsWith('مارس')&&MONTHS_AR.length===12);
   (async()=>{
     let pass=0;const rows=[];
