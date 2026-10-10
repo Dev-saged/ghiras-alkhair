@@ -1124,7 +1124,7 @@ details.adv[open] summary{margin-block-end:8px}
 <script>
 'use strict';
 /* ══════════ ١ الثوابت ══════════ */
-const APP_VERSION='1.5.0';
+const APP_VERSION='1.6.0';
 // إعداد السحابة الثابت: يتصل كل جهاز تلقائياً
 const CLOUD_PRESET=Object.freeze({project:'ghiras-alkhair',apiKey:'AIzaSyCmVmQHkelH4t6-STrbBr9CXOb14xuEg8c',worker:'https://ghiras-worker.dev-mr07.workers.dev',org:'ghras'});
 const LITE=document.documentElement.dataset.lite==='1';
@@ -2393,7 +2393,7 @@ function createRepo(dbName,{iter=600000,test=false}={}){
     await logEvent('login',{via:'cloud'},'users',user.id);
     publish();return{...sess};
   }
-  async function syncPeek(n=400){needSess(true);return T(['syncQueue'],'readonly',(tx,os)=>new Promise((res,rej)=>{const out=[];const rq=os('syncQueue').openCursor();rq.onsuccess=()=>{const c=rq.result;if(!c||out.length>=n)return res(out);out.push(c.value);c.continue()};rq.onerror=()=>rej(rq.error)}))}
+  async function syncPeek(n=400,pred=null){needSess(true);return T(['syncQueue'],'readonly',(tx,os)=>new Promise((res,rej)=>{const out=[];const rq=os('syncQueue').openCursor();rq.onsuccess=()=>{const c=rq.result;if(!c||out.length>=n)return res(out);if(!pred||pred(c.value))out.push(c.value);c.continue()};rq.onerror=()=>rej(rq.error)}))}
   async function syncAck(seqs){needSess(true);if(seqs.length)await T(['syncQueue'],'readwrite',(tx,os)=>{for(const q of seqs)os('syncQueue').delete(q)})}
   async function syncAckUpTo(seq){needSess(true);if(seq)await T(['syncQueue'],'readwrite',(tx,os)=>{os('syncQueue').delete(IDBKeyRange.upperBound(seq))})}
   const syncCount=()=>db?countRaw('syncQueue'):0;
@@ -6051,7 +6051,7 @@ const KID_AB=Object.freeze({wallets:'w',sponsorships:'s',aid:'a',followups:'f',o
 const KID_OF=Object.freeze(Object.fromEntries(Object.entries(KID_AB).map(([k,v])=>[v,k])));
 const KID_LEG=Object.freeze([['wallets','w'],['sponsorships','sp'],['aid','aid'],['followups','fu'],['orphanDonor','ln']]);
 const kidField=(st,id)=>`r_${KID_AB[st]}_${String(id).replace(/[^A-Za-z0-9]/g,'_')}`;
-const POLL_STEPS=Object.freeze([3000,4000,6000,10000,15000,30000]);
+const POLL_STEPS=Object.freeze([1500,2000,3000,5000,8000,15000,30000]);
 const WERR=Object.freeze({BAD_CREDENTIALS:'بيانات الدخول غير صحيحة',LOCKED:'أُوقفت المحاولات مؤقتاً؛ أعد المحاولة لاحقاً',RATE:'محاولات كثيرة؛ انتظر دقيقة',ENDED:'أُنهيت الجلسة من الإدارة',EXPIRED:'انتهت صلاحية الجلسة',FORBIDDEN:'لا تملك صلاحية هذا الإجراء في السحابة',BAD_SECRET:'رمز التهيئة غير صحيح',ALREADY:'السحابة مهيّأة مسبقاً لهذه الجمعية',ORG:'معرّف الجمعية غير مسموح في خادم التوقيع',USERNAME_TAKEN:'اسم المستخدم مستخدم في السحابة لحساب آخر',CONFIG:'خادم التوقيع غير مكتمل الإعداد',GOOGLE_AUTH:'تعذّر توثيق خادم التوقيع لدى Google',FIRESTORE:'تعذّر الوصول إلى قاعدة السحابة',BAD_CRED:'بيانات دخول غير صالحة للرفع',NOT_FOUND:'غير موجود في السحابة',PERMISSION_DENIED:'رفضت السحابة الوصول',UNAUTHENTICATED:'لا جلسة سحابية فعّالة',BAD_CODE:'الرمز غير صحيح؛ تأكد منه وأعد المحاولة',CODE_USED:'الرمز مستخدم',CODE_EXPIRED:'انتهت صلاحية هذا الرمز؛ اطلب رمزاً جديداً من الجمعية',CODE_BUSY:'الرمز قيد الاستخدام على جهاز آخر',RESERVATION:'انتهت مهلة حجز الرمز أو استُخدم على جهاز آخر؛ أدخل الرمز من جديد',BAD_PHOTO:'إحدى الصور غير صالحة أو كبيرة جداً',BAD_INPUT:'بيانات غير مكتملة أو غير صالحة',TOO_LARGE:'حجم الصور كبير جداً',CONFLICT:'تعارض في الحفظ؛ أعد المحاولة',CONFIGURATION_NOT_FOUND:'خدمة Authentication غير مفعّلة في Firebase',OPERATION_NOT_ALLOWED:'خدمة Authentication غير مفعّلة في Firebase',MISMATCH:'بيانات هذا الجهاز تخص قاعدة مختلفة عن السحابة',NETWORK:'لا يوجد اتصال بالإنترنت؛ تحقّق من الشبكة وأعد المحاولة',TIMEOUT:'انتهت مهلة الاتصال؛ أعد المحاولة',SUSPENDED:'حسابك موقوف، تواصل مع الإدارة',DELETED:'هذا الحساب لم يعد موجوداً؛ تواصل مع الإدارة',LAST_ADMIN:'لا يمكن حذف آخر مدير للنظام',SELF:'لا يمكنك حذف حسابك الحالي'});
 class CloudError extends Error{constructor(code,status=0){super(WERR[code]||code);this.name='CloudError';this.code=code;this.status=status}}
 function cloudCfg(raw){
@@ -6152,8 +6152,9 @@ const Cloud=(()=>{
     if(mine&&(wmust||me.role!=='admin')){const r=await W('/v1/creds/self',{session:wses,creds:mine});await exchange(r);list=creds.filter(c=>c!==mine)}
     if(me?.role==='admin'&&!me.mustChange&&!wmust)for(let i=0;i<list.length;i+=50)await W('/v1/creds/put',{session:wses,users:list.slice(i,i+50)})
   }
-  async function push(){
-    const q=await repo.syncPeek(400);if(!q.length)return{n:0,acked:0};
+  // مرحلتان: البيانات أولاً (دفعات كبيرة)، ثم الصور (دفعات صغيرة) بعد السحب فلا تؤخّر الصور ظهور البيانات عند الآخرين
+  async function push(stage='data'){
+    const isM=stage==='media',q=await repo.syncPeek(isM?4:400,e=>isM?e.store==='media':e.store!=='media');if(!q.length)return{n:0,acked:0};
     const role=repo.role,oids=new Map(),flat=new Map(),media=new Map(),users=new Set(),subs=new Set();
     const slot=id=>{let x=oids.get(id);if(!x)oids.set(id,x={o:0,g:0,h:'',kids:new Map()});return x};
     for(const e of q){
@@ -6348,6 +6349,8 @@ const Cloud=(()=>{
         notifyPending().catch(()=>{});
         if(p||n)idle=0;else idle++;
         if(repo.role==='admin'&&!wmust)setTimeout(backupAuto,4000);
+        for(let r=0;r<400&&!again;r++){const x=await push('media');if(!x.n||!x.acked)break;p+=x.n;idle=0}
+        set({pending:await repo.syncCount()});
         return n;
       }catch(e){
         if(e.status===403||e.status===401){const r=await endIfRevoked();if(r==='retry'){later(600);return 0}if(r)return 0}
@@ -6355,11 +6358,12 @@ const Cloud=(()=>{
       }
     }
   }
-  // رفع بعد ثانية من آخر تعديل؛ والسحب تكيّفي: كل ٣ ثوانٍ مع النشاط ثم يتباطأ تدريجياً حتى ٣٠ ثانية للجهاز الساكن، و٩٠ ثانية والتطبيق في الخلفية
-  const later=(ms=1000)=>{idle=0;clearTimeout(pushT);pushT=setTimeout(()=>sync(),ms)};
+  // رفع بعد 0.6 ثانية من آخر تعديل؛ والسحب تكيّفي: كل 1.5 ثانية بعد أي تغيير ثم يتباطأ، وبحدّ أقصى 10 ثوانٍ لمن يستخدم التطبيق و30 للساكن، و90 والتطبيق في الخلفية
+  const later=(ms=600)=>{idle=0;clearTimeout(pushT);pushT=setTimeout(()=>sync(),ms)};
+  let lastAct=0;
   function arm(){
     clearTimeout(timer);if(!tok)return;
-    const ms=document.hidden?90000:POLL_STEPS[Math.min(idle,POLL_STEPS.length-1)];
+    const ms=document.hidden?90000:Math.min(POLL_STEPS[Math.min(idle,POLL_STEPS.length-1)],Date.now()-lastAct<120000?10000:30000);
     timer=setTimeout(async()=>{if(!tok)return;if(ui.online.peek())await sync();arm()},ms);
   }
   function loop(){idle=0;sync().finally(arm)}
@@ -6466,8 +6470,8 @@ const Cloud=(()=>{
   effect(()=>{const s=repo.session();queueMicrotask(()=>{if(!s){stop();memAuth=held=prim=null;return}if(!s.user.mustChange)start(s)})});
   effect(()=>{['orphans','sponsorships','aid','followups','wallets','guardians','orphanDonor','media','donors','aidTypes','currencies','fxRates','letterheads','changeRequests','users','settings','staff','staffPay','projects','expenses'].forEach(n=>repo.rev(n)());if(repo.session.peek())repo.syncCount().then(n=>set({pending:n})).catch(()=>{});if(tok)later()});
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&tok){idle=0;later(300);arm()}});
+  for(const ev of ['focus','pageshow'])addEventListener(ev,()=>{if(tok&&!document.hidden){idle=0;later(300);arm()}});
   // لمسة المستخدم تُعيد السحب السريع؛ وإن كان الجهاز متباطئاً تُجرى مزامنة فورية ليرى أحدث البيانات
-  let lastAct=0;
   const act=()=>{const t=Date.now();if(t-lastAct<4000||!tok)return;lastAct=t;const was=idle>=3;idle=0;if(was){clearTimeout(pushT);pushT=setTimeout(()=>sync(),200)}arm()};
   for(const ev of ['pointerdown','keydown','touchstart'])addEventListener(ev,act,{passive:true,capture:true});
   addEventListener('online',()=>{const s=repo.session.peek();if(tok)later(800);else if(s&&!s.user.mustChange&&held&&state.peek().status!=='mismatch')start(s)});
